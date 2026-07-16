@@ -1,26 +1,205 @@
 @import "tailwindcss";
 
 :root {
+  --background: #000000;
+  --surface: #141414;
+  --surface-2: #1f1f1f;
+  --border: #2a2a2a;
+  --foreground: #ffffff;
+  --muted: #a3a3a3;
+
+  --brand: #c22cc9;
+  --brand-light: #d94fe0;
+  --brand-dark: #7c1d82;
+  --brand-contrast: #ffffff;
+
+  --accent-cyan: #2dd9f0;
+  --accent-gold: #eab308;
+  --success: #22c55e;
+  --danger: #ef4444;
+
+  --glass-bg-1: rgba(20, 20, 20, 0.85);
+  --glass-bg-2: rgba(0, 0, 0, 0.75);
+  --glass-border: rgba(255, 255, 255, 0.06);
+
+  --shadow-ambient-1: 0 16px 40px -16px rgba(0, 0, 0, 0.7);
+  --shadow-ambient-2: 0 4px 12px -4px rgba(0, 0, 0, 0.5);
+  --shadow-inset: 0 1px 0 0 rgba(255, 255, 255, 0.03) inset;
+
+  --text-glow-opacity: 0.4;
+  --grid-line: rgba(255, 255, 255, 0.04);
+}
+
+:root[data-theme="light"] {
   --background: #ffffff;
-  --foreground: #171717;
+  --surface: #f6f6f6;
+  --surface-2: #ececec;
+  --border: #e2e2e2;
+  --foreground: #141414;
+  --muted: #5c5c5c;
+
+  --brand: #c22cc9;
+  --brand-light: #9a1aa6;
+  --brand-dark: #7c1d82;
+  --brand-contrast: #ffffff;
+
+  --accent-cyan: #067a94;
+  --accent-gold: #a8720a;
+  --success: #0f9d6e;
+  --danger: #dc2626;
+
+  --glass-bg-1: rgba(255, 255, 255, 0.85);
+  --glass-bg-2: rgba(255, 255, 255, 0.65);
+  --glass-border: rgba(20, 20, 30, 0.06);
+
+  --shadow-ambient-1: 0 10px 24px -12px rgba(20, 20, 30, 0.12);
+  --shadow-ambient-2: 0 2px 6px -2px rgba(20, 20, 30, 0.08);
+  --shadow-inset: 0 1px 0 0 rgba(255, 255, 255, 0.7) inset;
+
+  --text-glow-opacity: 0.08;
+  --grid-line: rgba(20, 20, 30, 0.06);
 }
 
 @theme inline {
   --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-border: var(--border);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-muted: var(--muted);
+
+  --color-brand: var(--brand);
+  --color-brand-light: var(--brand-light);
+  --color-brand-dark: var(--brand-dark);
+  --color-brand-contrast: var(--brand-contrast);
+
+  --color-accent-cyan: var(--accent-cyan);
+  --color-accent-gold: var(--accent-gold);
+  --color-success: var(--success);
+  --color-danger: var(--danger);
+
+  --font-sans: var(--font-manrope);
+  --font-display: var(--font-bebas);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  color-scheme: dark;
+}
+html[data-theme="light"] {
+  color-scheme: light;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+  overflow-x: clip;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+::selection {
+  background: var(--brand);
+  color: white;
+}
+
+* {
+  scrollbar-color: var(--border) var(--surface);
+}
+
+.font-display {
+  font-family: var(--font-display), var(--font-sans), sans-serif;
+  letter-spacing: 0.02em;
+}
+
+/* ---------- Surface treatments ---------- */
+
+.glass {
+  background: linear-gradient(180deg, var(--glass-bg-1), var(--glass-bg-2));
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--glass-border);
+}
+
+.glow-card {
+  box-shadow: var(--shadow-inset), var(--shadow-ambient-1), var(--shadow-ambient-2);
+}
+
+/* Reserved for the single primary hero/CTA moment — not for general chrome. */
+.glow-brand {
+  box-shadow:
+    0 0 0 1px rgba(194, 44, 201, 0.3),
+    0 10px 28px -10px rgba(194, 44, 201, 0.45);
+}
+
+.text-glow {
+  text-shadow: 0 0 40px rgba(194, 44, 201, var(--text-glow-opacity));
+}
+
+.bg-grid {
+  background-image:
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+  background-size: 44px 44px;
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 0%, black 40%, transparent 90%);
+}
+
+/* ---------- Horizontal browsing rows ---------- */
+
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.snap-row {
+  scroll-snap-type: x proximity;
+  scroll-padding-left: 1rem;
+}
+.snap-item {
+  scroll-snap-align: start;
+}
+
+/* ---------- Motion ---------- */
+
+@keyframes marquee-glow {
+  0%,
+  100% {
+    opacity: 0.7;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+.animate-marquee-glow {
+  animation: marquee-glow 3s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+.animate-shimmer {
+  background: linear-gradient(90deg, var(--surface-2) 25%, var(--border) 50%, var(--surface-2) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.8s ease-in-out infinite;
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-fade-up {
+  animation: fade-up 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
 }

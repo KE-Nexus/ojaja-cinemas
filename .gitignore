@@ -39,3 +39,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+/src/generated/prisma
+
+# local SQLite dev database (seeded on each machine via `npm run seed`)
+prisma/dev.db
+prisma/dev.db-journal

@@ -1,0 +1,18 @@
+import { prisma } from "@/lib/prisma";
+import { ShowtimeForm } from "@/components/admin/showtime-form";
+
+export default async function NewShowtimePage() {
+  const [movies, auditoriums] = await Promise.all([
+    prisma.movie.findMany({ where: { status: { not: "ARCHIVED" } }, orderBy: { title: "asc" } }),
+    prisma.auditorium.findMany({ include: { branch: true }, orderBy: { name: "asc" } }),
+  ]);
+
+  return (
+    <div className="max-w-xl">
+      <h1 className="mb-6 font-sans text-2xl font-bold tracking-tight">Add Showtime</h1>
+      <div className="rounded-2xl border border-border bg-surface p-6">
+        <ShowtimeForm movies={movies} auditoriums={auditoriums} />
+      </div>
+    </div>
+  );
+}
