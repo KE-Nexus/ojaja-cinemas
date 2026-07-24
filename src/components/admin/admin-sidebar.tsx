@@ -11,6 +11,8 @@ import {
   MapPin,
   Armchair,
   Ticket,
+  TicketCheck,
+  FileSignature,
   Star,
   PartyPopper,
   Tag,
@@ -20,6 +22,11 @@ import {
   Bell,
   LogOut,
   ExternalLink,
+  Package,
+  Warehouse,
+  UserCog,
+  CalendarDays,
+  Wallet,
 } from "lucide-react";
 import { logoutAction } from "@/actions/auth";
 import type { Role } from "@prisma/client";
@@ -37,9 +44,11 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
     label: "Content",
     items: [
       { href: "/admin/movies", label: "Movies", icon: Film, roles: null },
+      { href: "/admin/movies/contracts", label: "Film Contracts", icon: FileSignature, roles: ["SUPERVISOR", "CIRCUIT_ADMIN"] },
+      { href: "/admin/movies/tickets", label: "Tickets", icon: TicketCheck, roles: ["SUPERVISOR", "CIRCUIT_ADMIN"] },
       { href: "/admin/showtimes", label: "Showtimes", icon: CalendarClock, roles: null },
-      { href: "/admin/scheduling", label: "Film Scheduling", icon: CalendarRange, roles: ["MANAGER", "ADMIN"] },
-      { href: "/admin/locations", label: "Locations", icon: MapPin, roles: ["MANAGER", "ADMIN"] },
+      { href: "/admin/scheduling", label: "Film Scheduling", icon: CalendarRange, roles: ["SUPERVISOR", "CIRCUIT_ADMIN"] },
+      { href: "/admin/locations", label: "Locations", icon: MapPin, roles: ["SUPERVISOR", "CIRCUIT_ADMIN"] },
       { href: "/admin/auditoriums", label: "Auditoriums", icon: Armchair, roles: null },
     ],
   },
@@ -47,7 +56,14 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
     label: "Sales",
     items: [
       { href: "/admin/bookings", label: "Bookings", icon: Ticket, roles: null },
-      { href: "/admin/promo-codes", label: "Promo Codes", icon: Tag, roles: ["MANAGER", "ADMIN", "MARKETING"] },
+      { href: "/admin/promo-codes", label: "Promo Codes", icon: Tag, roles: ["SUPERVISOR", "CIRCUIT_ADMIN", "ACCOUNTANT"] },
+    ],
+  },
+  {
+    label: "POS",
+    items: [
+      { href: "/admin/pos/ho-items", label: "HO Items", icon: Warehouse, roles: ["SUPERVISOR", "CIRCUIT_ADMIN"] },
+      { href: "/admin/pos/items", label: "All Items", icon: Package, roles: ["SUPERVISOR", "CIRCUIT_ADMIN"] },
     ],
   },
   {
@@ -60,21 +76,36 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
   {
     label: "Insights",
     items: [
-      { href: "/admin/reports", label: "Reports", icon: BarChart3, roles: ["MANAGER", "ADMIN"] },
-      { href: "/admin/notifications", label: "Notifications", icon: Bell, roles: ["MANAGER", "ADMIN"] },
+      { href: "/admin/reports", label: "Reports", icon: BarChart3, roles: ["SUPERVISOR", "CIRCUIT_ADMIN", "AUDITOR"] },
+      { href: "/admin/notifications", label: "Notifications", icon: Bell, roles: ["SUPERVISOR", "CIRCUIT_ADMIN"] },
+    ],
+  },
+  {
+    label: "Staff",
+    items: [
+      { href: "/admin/staff", label: "Staff", icon: UserCog, roles: ["SUPERVISOR", "CIRCUIT_ADMIN"] },
+      { href: "/admin/staff/roster", label: "Roster", icon: CalendarDays, roles: ["SUPERVISOR", "CIRCUIT_ADMIN"] },
+      { href: "/admin/staff/sessions", label: "Staff Sessions", icon: Wallet, roles: ["SUPERVISOR", "CIRCUIT_ADMIN"] },
     ],
   },
   {
     label: "Administration",
     items: [
-      { href: "/admin/users", label: "Users & Roles", icon: Users, roles: ["ADMIN"] },
-      { href: "/admin/audit-log", label: "Audit Log", icon: ScrollText, roles: ["MANAGER", "ADMIN"] },
+      { href: "/admin/users", label: "Users & Roles", icon: Users, roles: ["CIRCUIT_ADMIN"] },
+      { href: "/admin/audit-log", label: "Audit Log", icon: ScrollText, roles: ["SUPERVISOR", "CIRCUIT_ADMIN", "AUDITOR"] },
     ],
   },
 ];
 
 export function AdminSidebar({ name, role }: { name: string; role: Role }) {
   const pathname = usePathname();
+
+  // Nested routes (e.g. /admin/movies/contracts under /admin/movies) share a path prefix
+  // with their parent — only the most specific matching item should light up.
+  const allHrefs = NAV_GROUPS.flatMap((g) => g.items.map((i) => i.href));
+  const bestMatch = allHrefs
+    .filter((href) => (href === "/admin" ? pathname === "/admin" : pathname === href || pathname.startsWith(`${href}/`)))
+    .sort((a, b) => b.length - a.length)[0];
 
   return (
     <aside className="glass sticky top-0 flex h-screen w-64 shrink-0 flex-col border-r border-white/5">
@@ -94,7 +125,7 @@ export function AdminSidebar({ name, role }: { name: string; role: Role }) {
               </p>
               <div className="space-y-0.5">
                 {items.map((item) => {
-                  const active = item.href === "/admin" ? pathname === "/admin" : pathname.startsWith(item.href);
+                  const active = item.href === bestMatch;
                   const Icon = item.icon;
                   return (
                     <Link

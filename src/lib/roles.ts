@@ -7,7 +7,7 @@ export type SessionPayload = {
   email: string;
 };
 
-const STAFF_ROLES: Role[] = ["BOX_OFFICE", "MARKETING", "MANAGER", "ADMIN"];
+const STAFF_ROLES: Role[] = ["TICKETER", "ACCOUNTANT", "SUPERVISOR", "TECHNICIAN", "AUDITOR", "CIRCUIT_ADMIN"];
 
 export function isStaffRole(role: Role): boolean {
   return STAFF_ROLES.includes(role);

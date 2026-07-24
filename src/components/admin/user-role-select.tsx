@@ -26,10 +26,12 @@ export function UserRoleSelect({ userId, role }: { userId: string; role: Role })
       className="rounded-lg border border-border bg-surface-2 px-2 py-1 text-xs"
     >
       <option value="CUSTOMER">Customer</option>
-      <option value="BOX_OFFICE">Box Office</option>
-      <option value="MARKETING">Marketing</option>
-      <option value="MANAGER">Manager</option>
-      <option value="ADMIN">Admin</option>
+      <option value="TICKETER">Ticketer</option>
+      <option value="ACCOUNTANT">Accountant</option>
+      <option value="SUPERVISOR">Supervisor</option>
+      <option value="TECHNICIAN">Technician</option>
+      <option value="AUDITOR">Auditor</option>
+      <option value="CIRCUIT_ADMIN">Circuit Admin</option>
     </select>
   );
 }

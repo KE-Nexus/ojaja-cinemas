@@ -17,7 +17,7 @@ export default async function ConfirmationPage({ params }: { params: Promise<{ r
     include: {
       showtime: { include: { movie: true, auditorium: { include: { branch: true } } } },
       seats: { include: { seat: true }, orderBy: { seat: { number: "asc" } } },
-      concessions: { include: { concessionItem: true } },
+      concessions: { include: { posItem: true } },
       user: true,
     },
   });
@@ -76,7 +76,7 @@ export default async function ConfirmationPage({ params }: { params: Promise<{ r
                   <ul className="text-sm">
                     {booking.concessions.map((c) => (
                       <li key={c.id}>
-                        {c.quantity}x {c.concessionItem.name}
+                        {c.quantity}x {c.posItem.name}
                       </li>
                     ))}
                   </ul>

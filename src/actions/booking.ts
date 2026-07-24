@@ -17,8 +17,9 @@ import { checkoutSchema, lockSeatsSchema } from "@/lib/validation";
 import { formatNaira, formatShowtime } from "@/lib/format";
 
 export type FormState = { error?: string } | null;
+export type SeatLockFormState = { error?: string; conflict?: boolean } | null;
 
-export async function lockSeatsAction(_prev: FormState, formData: FormData): Promise<FormState> {
+export async function lockSeatsAction(_prev: SeatLockFormState, formData: FormData): Promise<SeatLockFormState> {
   const showtimeId = String(formData.get("showtimeId"));
   const sessionId = String(formData.get("sessionId"));
   const seatIds = formData.getAll("seatIds").map(String);
@@ -29,7 +30,7 @@ export async function lockSeatsAction(_prev: FormState, formData: FormData): Pro
   try {
     await lockSeats(parsed.data.showtimeId, parsed.data.seatIds, parsed.data.sessionId);
   } catch (e) {
-    if (e instanceof SeatUnavailableError) return { error: e.message };
+    if (e instanceof SeatUnavailableError) return { error: e.message, conflict: true };
     throw e;
   }
 
@@ -81,11 +82,11 @@ export async function createPendingBookingAction(_prev: FormState, formData: For
   const subtotal = activeLocks.reduce((sum, lock) => sum + seatPrice(showtime.basePrice, lock.seat.category), 0);
 
   const concessionItems = parsed.data.concessions.length
-    ? await prisma.concessionItem.findMany({ where: { id: { in: parsed.data.concessions.map((c) => c.id) } } })
+    ? await prisma.posItem.findMany({ where: { id: { in: parsed.data.concessions.map((c) => c.id) } } })
     : [];
   const concessionTotal = parsed.data.concessions.reduce((sum, c) => {
     const item = concessionItems.find((i) => i.id === c.id);
-    return sum + (item ? item.price * c.quantity : 0);
+    return sum + (item ? item.defaultPrice * c.quantity : 0);
   }, 0);
 
   let discount = 0;
@@ -127,7 +128,7 @@ export async function createPendingBookingAction(_prev: FormState, formData: For
       const item = concessionItems.find((i) => i.id === c.id);
       if (item) {
         await tx.bookingConcession.create({
-          data: { bookingId: booking.id, concessionItemId: item.id, quantity: c.quantity, priceAtBooking: item.price },
+          data: { bookingId: booking.id, posItemId: item.id, quantity: c.quantity, priceAtBooking: item.defaultPrice },
         });
       }
     }

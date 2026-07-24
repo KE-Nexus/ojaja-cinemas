@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 
 export default async function AdminAuditLogPage() {
   const session = await getSession();
-  if (session?.role !== "MANAGER" && session?.role !== "ADMIN") redirect("/admin");
+  if (session?.role !== "SUPERVISOR" && session?.role !== "CIRCUIT_ADMIN" && session?.role !== "AUDITOR") redirect("/admin");
 
   const logs = await prisma.auditLog.findMany({
     include: { actor: true },

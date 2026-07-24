@@ -10,7 +10,7 @@ import { showtimeSchema } from "@/lib/validation";
 export type FormState = { error?: string } | null;
 
 export async function createShowtimeAction(_prev: FormState, formData: FormData): Promise<FormState> {
-  const session = await requireRole(["MANAGER", "ADMIN"]);
+  const session = await requireRole(["SUPERVISOR", "CIRCUIT_ADMIN"]);
   const parsed = showtimeSchema.safeParse({
     movieId: formData.get("movieId"),
     auditoriumId: formData.get("auditoriumId"),
@@ -31,7 +31,7 @@ export async function createShowtimeAction(_prev: FormState, formData: FormData)
 }
 
 export async function deleteShowtimeAction(id: string) {
-  const session = await requireRole(["MANAGER", "ADMIN"]);
+  const session = await requireRole(["SUPERVISOR", "CIRCUIT_ADMIN"]);
   await prisma.showtime.delete({ where: { id } });
   await logAdminAction(session.sub, "DELETE", "Showtime", id);
   revalidatePath("/admin/showtimes");

@@ -30,13 +30,14 @@ function parseMovieForm(formData: FormData) {
     runtimeMins: formData.get("runtimeMins"),
     cast: formData.get("cast"),
     director: formData.get("director") || "",
+    distributor: formData.get("distributor") || "",
     releaseDate: formData.get("releaseDate"),
     status: formData.get("status"),
   });
 }
 
 export async function createMovieAction(_prev: FormState, formData: FormData): Promise<FormState> {
-  const session = await requireRole(["MANAGER", "ADMIN", "MARKETING"]);
+  const session = await requireRole(["SUPERVISOR", "CIRCUIT_ADMIN", "ACCOUNTANT"]);
   const parsed = parseMovieForm(formData);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Please check the form." };
 
@@ -54,6 +55,7 @@ export async function createMovieAction(_prev: FormState, formData: FormData): P
       backdropUrl: parsed.data.backdropUrl || null,
       trailerUrl: parsed.data.trailerUrl || null,
       director: parsed.data.director || null,
+      distributor: parsed.data.distributor || null,
       releaseDate: new Date(parsed.data.releaseDate),
     },
   });
@@ -64,7 +66,7 @@ export async function createMovieAction(_prev: FormState, formData: FormData): P
 }
 
 export async function updateMovieAction(_prev: FormState, formData: FormData): Promise<FormState> {
-  const session = await requireRole(["MANAGER", "ADMIN", "MARKETING"]);
+  const session = await requireRole(["SUPERVISOR", "CIRCUIT_ADMIN", "ACCOUNTANT"]);
   const id = String(formData.get("id"));
   const parsed = parseMovieForm(formData);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Please check the form." };
@@ -76,6 +78,7 @@ export async function updateMovieAction(_prev: FormState, formData: FormData): P
       backdropUrl: parsed.data.backdropUrl || null,
       trailerUrl: parsed.data.trailerUrl || null,
       director: parsed.data.director || null,
+      distributor: parsed.data.distributor || null,
       releaseDate: new Date(parsed.data.releaseDate),
     },
   });
@@ -86,7 +89,7 @@ export async function updateMovieAction(_prev: FormState, formData: FormData): P
 }
 
 export async function deleteMovieAction(id: string) {
-  const session = await requireRole(["MANAGER", "ADMIN"]);
+  const session = await requireRole(["SUPERVISOR", "CIRCUIT_ADMIN"]);
   await prisma.movie.delete({ where: { id } });
   await logAdminAction(session.sub, "DELETE", "Movie", id);
   revalidatePath("/admin/movies");

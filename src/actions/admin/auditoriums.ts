@@ -11,7 +11,7 @@ import type { SeatCategory } from "@prisma/client";
 export type FormState = { error?: string } | null;
 
 export async function createAuditoriumAction(_prev: FormState, formData: FormData): Promise<FormState> {
-  const session = await requireRole(["MANAGER", "ADMIN"]);
+  const session = await requireRole(["SUPERVISOR", "CIRCUIT_ADMIN", "TECHNICIAN"]);
   const parsed = auditoriumSchema.safeParse({
     branchId: formData.get("branchId"),
     name: formData.get("name"),
@@ -42,14 +42,14 @@ export async function createAuditoriumAction(_prev: FormState, formData: FormDat
 }
 
 export async function updateSeatCategoryAction(seatId: string, category: SeatCategory) {
-  const session = await requireRole(["MANAGER", "ADMIN"]);
+  const session = await requireRole(["SUPERVISOR", "CIRCUIT_ADMIN", "TECHNICIAN"]);
   const seat = await prisma.seat.update({ where: { id: seatId }, data: { category } });
   await logAdminAction(session.sub, "UPDATE", "Seat", seatId, { category });
   revalidatePath(`/admin/auditoriums/${seat.auditoriumId}`);
 }
 
 export async function deleteAuditoriumAction(id: string) {
-  const session = await requireRole(["MANAGER", "ADMIN"]);
+  const session = await requireRole(["SUPERVISOR", "CIRCUIT_ADMIN", "TECHNICIAN"]);
   await prisma.auditorium.delete({ where: { id } });
   await logAdminAction(session.sub, "DELETE", "Auditorium", id);
   revalidatePath("/admin/auditoriums");

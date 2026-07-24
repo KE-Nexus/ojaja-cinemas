@@ -12,17 +12,19 @@ import { formatNaira, formatShowtime } from "@/lib/format";
 export type FormState = { error?: string } | null;
 
 export async function createManualBookingAction(_prev: FormState, formData: FormData): Promise<FormState> {
-  const session = await requireRole(["BOX_OFFICE", "MANAGER", "ADMIN"]);
+  const session = await requireRole(["TICKETER", "SUPERVISOR", "CIRCUIT_ADMIN"]);
 
   const showtimeId = String(formData.get("showtimeId") ?? "");
   const seatIds = formData.getAll("seatIds").map(String);
   const guestName = String(formData.get("guestName") ?? "").trim();
   const guestEmail = String(formData.get("guestEmail") ?? "").trim();
   const guestPhone = String(formData.get("guestPhone") ?? "").trim();
+  const paymentMethod = String(formData.get("paymentMethod") ?? "CASH");
 
   if (!showtimeId) return { error: "Select a showtime." };
   if (seatIds.length === 0) return { error: "Select at least one seat." };
   if (!guestName || !guestPhone) return { error: "Customer name and phone are required." };
+  if (!["CARD", "CASH", "TRANSFER", "VOUCHER"].includes(paymentMethod)) return { error: "Select a valid payment method." };
 
   const showtime = await prisma.showtime.findUnique({ where: { id: showtimeId }, include: { movie: true } });
   if (!showtime) return { error: "Showtime not found." };
@@ -46,6 +48,7 @@ export async function createManualBookingAction(_prev: FormState, formData: Form
         guestEmail: guestEmail || undefined,
         guestPhone,
         showtimeId,
+        processedById: session.sub,
         status: "CONFIRMED",
         subtotal: totalAmount,
         totalAmount,
@@ -62,7 +65,7 @@ export async function createManualBookingAction(_prev: FormState, formData: Form
       data: {
         bookingId: booking.id,
         provider: "box-office",
-        method: "counter",
+        method: paymentMethod,
         status: "SUCCESS",
         amount: totalAmount,
         reference: `COUNTER-${reference}`,
@@ -87,7 +90,7 @@ export async function createManualBookingAction(_prev: FormState, formData: Form
 }
 
 export async function refundBookingAction(bookingId: string) {
-  const session = await requireRole(["BOX_OFFICE", "MANAGER", "ADMIN"]);
+  const session = await requireRole(["TICKETER", "SUPERVISOR", "CIRCUIT_ADMIN"]);
 
   const booking = await prisma.booking.findUnique({ where: { id: bookingId } });
   if (!booking || booking.status !== "CONFIRMED") return;

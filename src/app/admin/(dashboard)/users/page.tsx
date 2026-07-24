@@ -5,7 +5,7 @@ import { UserRoleSelect } from "@/components/admin/user-role-select";
 
 export default async function AdminUsersPage() {
   const session = await getSession();
-  if (session?.role !== "ADMIN") redirect("/admin");
+  if (session?.role !== "CIRCUIT_ADMIN") redirect("/admin");
 
   const users = await prisma.user.findMany({ orderBy: { createdAt: "asc" } });
 

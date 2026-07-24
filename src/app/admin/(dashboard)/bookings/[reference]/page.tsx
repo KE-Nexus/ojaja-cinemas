@@ -20,7 +20,7 @@ export default async function AdminBookingDetailPage({ params }: { params: Promi
     include: {
       showtime: { include: { movie: true, auditorium: { include: { branch: true } } } },
       seats: { include: { seat: true } },
-      concessions: { include: { concessionItem: true } },
+      concessions: { include: { posItem: true } },
       payments: true,
       user: true,
     },

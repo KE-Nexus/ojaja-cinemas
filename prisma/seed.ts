@@ -266,12 +266,12 @@ const MOVIES = [
 ];
 
 const CONCESSIONS = [
-  { name: "Classic Popcorn (Regular)", description: "Freshly popped, lightly salted.", price: 1500 },
-  { name: "Classic Popcorn (Large)", description: "Freshly popped, lightly salted — the big one.", price: 2200 },
-  { name: "Nachos & Cheese", description: "Crisp nachos with warm cheese sauce.", price: 2500 },
-  { name: "Soft Drink (Regular)", description: "Coke, Fanta, or Sprite.", price: 1000 },
-  { name: "Combo: Popcorn + 2 Drinks", description: "Large popcorn with two regular soft drinks.", price: 4000 },
-  { name: "Hot Dog", description: "Grilled hot dog with your choice of sauce.", price: 2000 },
+  { name: "Classic Popcorn (Regular)", description: "Freshly popped, lightly salted.", itemClass: "Concessions", itemGroup: "Popcorn", defaultPrice: 1500 },
+  { name: "Classic Popcorn (Large)", description: "Freshly popped, lightly salted — the big one.", itemClass: "Concessions", itemGroup: "Popcorn", defaultPrice: 2200 },
+  { name: "Nachos & Cheese", description: "Crisp nachos with warm cheese sauce.", itemClass: "Concessions", itemGroup: "Snacks", defaultPrice: 2500 },
+  { name: "Soft Drink (Regular)", description: "Coke, Fanta, or Sprite.", itemClass: "Concessions", itemGroup: "Drinks", defaultPrice: 1000 },
+  { name: "Combo: Popcorn + 2 Drinks", description: "Large popcorn with two regular soft drinks.", itemClass: "Concessions", itemGroup: "Combos", defaultPrice: 4000 },
+  { name: "Hot Dog", description: "Grilled hot dog with your choice of sauce.", itemClass: "Concessions", itemGroup: "Snacks", defaultPrice: 2000 },
 ];
 
 function daysFromNow(offset: number, hour: number, minute = 0) {
@@ -287,26 +287,36 @@ async function main() {
   // ---------- Users ----------
   const passwordHash = await bcrypt.hash("Password123!", 12);
 
-  const [admin, manager, boxOffice, marketing, customer] = await Promise.all([
+  const [circuitAdmin, supervisor, ticketer, accountant, technician, auditor, customer] = await Promise.all([
     prisma.user.upsert({
       where: { email: "admin@ojaja.cinema" },
       update: {},
-      create: { name: "Ada Obinna", email: "admin@ojaja.cinema", phone: "+2348010000001", passwordHash, role: "ADMIN" },
+      create: { name: "Ada Obinna", email: "admin@ojaja.cinema", phone: "+2348010000001", passwordHash, role: "CIRCUIT_ADMIN" },
     }),
     prisma.user.upsert({
       where: { email: "manager@ojaja.cinema" },
       update: {},
-      create: { name: "Bayo Salako", email: "manager@ojaja.cinema", phone: "+2348010000002", passwordHash, role: "MANAGER" },
+      create: { name: "Bayo Salako", email: "manager@ojaja.cinema", phone: "+2348010000002", passwordHash, role: "SUPERVISOR" },
     }),
     prisma.user.upsert({
       where: { email: "boxoffice@ojaja.cinema" },
       update: {},
-      create: { name: "Ronke Idris", email: "boxoffice@ojaja.cinema", phone: "+2348010000003", passwordHash, role: "BOX_OFFICE" },
+      create: { name: "Ronke Idris", email: "boxoffice@ojaja.cinema", phone: "+2348010000003", passwordHash, role: "TICKETER" },
     }),
     prisma.user.upsert({
-      where: { email: "marketing@ojaja.cinema" },
+      where: { email: "accountant@ojaja.cinema" },
       update: {},
-      create: { name: "Emeka Uzo", email: "marketing@ojaja.cinema", phone: "+2348010000004", passwordHash, role: "MARKETING" },
+      create: { name: "Emeka Uzo", email: "accountant@ojaja.cinema", phone: "+2348010000004", passwordHash, role: "ACCOUNTANT" },
+    }),
+    prisma.user.upsert({
+      where: { email: "technician@ojaja.cinema" },
+      update: {},
+      create: { name: "Femi Kalu", email: "technician@ojaja.cinema", phone: "+2348010000006", passwordHash, role: "TECHNICIAN" },
+    }),
+    prisma.user.upsert({
+      where: { email: "auditor@ojaja.cinema" },
+      update: {},
+      create: { name: "Ngozi Eze", email: "auditor@ojaja.cinema", phone: "+2348010000007", passwordHash, role: "AUDITOR" },
     }),
     prisma.user.upsert({
       where: { email: "customer@example.com" },
@@ -449,6 +459,26 @@ async function main() {
   const hours = [12, 15, 18, 21];
   const branchIdsInOrder = Array.from(new Set(auditoriumIds.map((a) => a.branchId)));
 
+  // ---------- Assign seeded staff to a home branch ----------
+  // CircuitAdmin stays circuit-wide (no single branch); everyone else gets a home
+  // cinema and an employee number so the Staff page has real, filterable data.
+  const staffAssignments = [
+    { user: supervisor, code: "SUP" },
+    { user: ticketer, code: "TCK" },
+    { user: accountant, code: "ACC" },
+    { user: technician, code: "TEC" },
+    { user: auditor, code: "AUD" },
+  ];
+  for (const [i, { user, code }] of staffAssignments.entries()) {
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        branchId: branchIdsInOrder[i % branchIdsInOrder.length],
+        staffNumber: user.staffNumber ?? `STF-${code}-001`,
+      },
+    });
+  }
+
   const existingShowtimeCount = await prisma.showtime.count();
   if (existingShowtimeCount === 0) {
     for (let i = 0; i < nowShowing.length; i++) {
@@ -476,11 +506,18 @@ async function main() {
     }
   }
 
-  // ---------- Concessions ----------
+  // ---------- POS Items (HO catalog + per-location activation) ----------
   for (const c of CONCESSIONS) {
-    const existing = await prisma.concessionItem.findFirst({ where: { name: c.name } });
-    if (!existing) {
-      await prisma.concessionItem.create({ data: c });
+    const existingHoItem = await prisma.posItem.findFirst({ where: { branchId: null, name: c.name } });
+    if (!existingHoItem) {
+      await prisma.posItem.create({ data: { ...c, branchId: null } });
+    }
+
+    for (const branchId of branchIdsInOrder) {
+      const existingLocationItem = await prisma.posItem.findFirst({ where: { branchId, name: c.name } });
+      if (!existingLocationItem) {
+        await prisma.posItem.create({ data: { ...c, branchId } });
+      }
     }
   }
 
@@ -516,11 +553,13 @@ async function main() {
 
   console.log("Seed complete.");
   console.log("Demo accounts (password: Password123!):");
-  console.log(`  Admin:      ${admin.email}`);
-  console.log(`  Manager:    ${manager.email}`);
-  console.log(`  Box Office: ${boxOffice.email}`);
-  console.log(`  Marketing:  ${marketing.email}`);
-  console.log(`  Customer:   ${customer.email}`);
+  console.log(`  Circuit Admin: ${circuitAdmin.email}`);
+  console.log(`  Supervisor:    ${supervisor.email}`);
+  console.log(`  Ticketer:      ${ticketer.email}`);
+  console.log(`  Accountant:    ${accountant.email}`);
+  console.log(`  Technician:    ${technician.email}`);
+  console.log(`  Auditor:       ${auditor.email}`);
+  console.log(`  Customer:      ${customer.email}`);
 }
 
 main()

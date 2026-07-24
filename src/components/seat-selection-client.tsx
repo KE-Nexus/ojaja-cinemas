@@ -1,16 +1,16 @@
 "use client";
 
-import { useActionState, useMemo, useState } from "react";
+import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import { SeatMap, type SeatMapSeat } from "@/components/seat-map";
 import { Button } from "@/components/ui/button";
-import { lockSeatsAction, type FormState } from "@/actions/booking";
+import { lockSeatsAction, type SeatLockFormState } from "@/actions/booking";
 import { formatNaira } from "@/lib/format";
 import { seatPrice } from "@/lib/booking-client";
 
 export function SeatSelectionClient({
   showtimeId,
   sessionId,
-  seats,
+  seats: initialSeats,
   rows,
   seatsPerRow,
   basePrice,
@@ -22,12 +22,37 @@ export function SeatSelectionClient({
   seatsPerRow: number;
   basePrice: number;
 }) {
+  const [seats, setSeats] = useState(initialSeats);
   const initiallySelected = useMemo(
-    () => new Set(seats.filter((s) => s.status === "SELECTED").map((s) => s.id)),
-    [seats]
+    () => new Set(initialSeats.filter((s) => s.status === "SELECTED").map((s) => s.id)),
+    [initialSeats]
   );
   const [selected, setSelected] = useState<Set<string>>(initiallySelected);
-  const [state, formAction, isPending] = useActionState<FormState, FormData>(lockSeatsAction, null);
+  const [state, formAction, isPending] = useActionState<SeatLockFormState, FormData>(lockSeatsAction, null);
+
+  // A failed lock attempt (someone else booked/held a seat we picked) means our on-screen
+  // map is stale — pull the current state so the taken seat shows locked instead of leaving
+  // the user to guess which of their picks was the problem.
+  const lastHandledError = useRef<SeatLockFormState>(null);
+  useEffect(() => {
+    if (!state?.conflict || state === lastHandledError.current) return;
+    lastHandledError.current = state;
+
+    fetch(`/api/seats/${showtimeId}?sessionId=${sessionId}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { seats: SeatMapSeat[] } | null) => {
+        if (!data) return;
+        setSeats(data.seats);
+        setSelected((prev) => {
+          const next = new Set<string>();
+          for (const id of prev) {
+            const seat = data.seats.find((s) => s.id === id);
+            if (seat && seat.status !== "BOOKED" && seat.status !== "LOCKED") next.add(id);
+          }
+          return next;
+        });
+      });
+  }, [state, showtimeId, sessionId]);
 
   const seatById = useMemo(() => new Map(seats.map((s) => [s.id, s])), [seats]);
 
@@ -88,7 +113,12 @@ export function SeatSelectionClient({
           <span className="text-brand-light">{formatNaira(total)}</span>
         </div>
 
-        {state?.error && <p className="text-sm text-danger">{state.error}</p>}
+        {state?.error && (
+          <p className="text-sm text-danger">
+            {state.error}
+            {state.conflict && " The seat map has been refreshed — please choose another seat."}
+          </p>
+        )}
 
         <Button type="submit" className="w-full" disabled={selected.size === 0 || isPending}>
           {isPending ? "Holding seats..." : `Continue (${selected.size} seat${selected.size === 1 ? "" : "s"})`}

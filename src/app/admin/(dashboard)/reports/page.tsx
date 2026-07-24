@@ -5,7 +5,7 @@ import { ReportList } from "@/components/admin/report-list";
 
 export default async function AdminReportsPage() {
   const session = await getSession();
-  if (session?.role !== "MANAGER" && session?.role !== "ADMIN") redirect("/admin");
+  if (session?.role !== "SUPERVISOR" && session?.role !== "CIRCUIT_ADMIN" && session?.role !== "AUDITOR") redirect("/admin");
 
   return (
     <div>

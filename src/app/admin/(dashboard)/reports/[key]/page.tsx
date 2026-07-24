@@ -5,6 +5,8 @@ import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getReportDefinition } from "@/lib/admin-reports";
 import { DownloadCsvButton } from "@/components/admin/download-csv-button";
+import { Button } from "@/components/ui/button";
+import { Input, Label } from "@/components/ui/input";
 import { formatNaira } from "@/lib/format";
 
 function startOfDay(offset = 0) {
@@ -14,13 +16,22 @@ function startOfDay(offset = 0) {
   return d;
 }
 
+type DateRange = { from?: Date; to?: Date };
+
+function createdAtFilter({ from, to }: DateRange) {
+  if (!from && !to) return undefined;
+  return { ...(from ? { gte: from } : {}), ...(to ? { lt: to } : {}) };
+}
+
 type Table = { headers: string[]; rows: (string | number)[][] };
 
-async function buildReport(key: string): Promise<{ summary?: string; table: Table } | null> {
+async function buildReport(key: string, range: DateRange): Promise<{ summary?: string; table: Table } | null> {
+  const createdAt = createdAtFilter(range);
+
   switch (key) {
     case "daily-operations": {
-      const todayStart = startOfDay();
-      const todayEnd = startOfDay(1);
+      const todayStart = range.from ?? startOfDay();
+      const todayEnd = range.to ?? startOfDay(1);
       const bookings = await prisma.booking.findMany({
         where: { status: "CONFIRMED", createdAt: { gte: todayStart, lt: todayEnd } },
         include: { showtime: { include: { movie: true, auditorium: { include: { branch: true } } } }, seats: true },
@@ -28,7 +39,7 @@ async function buildReport(key: string): Promise<{ summary?: string; table: Tabl
       });
       const revenue = bookings.reduce((s, b) => s + b.totalAmount, 0);
       return {
-        summary: `${bookings.length} confirmed bookings today · ${formatNaira(revenue)} revenue`,
+        summary: `${bookings.length} confirmed bookings · ${formatNaira(revenue)} revenue`,
         table: {
           headers: ["Reference", "Movie", "Branch", "Seats", "Amount", "Time"],
           rows: bookings.map((b) => [
@@ -45,7 +56,7 @@ async function buildReport(key: string): Promise<{ summary?: string; table: Tabl
 
     case "box-office-performance": {
       const bookings = await prisma.booking.findMany({
-        where: { status: "CONFIRMED" },
+        where: { status: "CONFIRMED", ...(createdAt ? { createdAt } : {}) },
         include: { showtime: { include: { movie: true } }, seats: true },
       });
       const byMovie = new Map<string, { title: string; revenue: number; tickets: number; bookings: number }>();
@@ -69,7 +80,7 @@ async function buildReport(key: string): Promise<{ summary?: string; table: Tabl
 
     case "revenue-by-branch": {
       const bookings = await prisma.booking.findMany({
-        where: { status: "CONFIRMED" },
+        where: { status: "CONFIRMED", ...(createdAt ? { createdAt } : {}) },
         include: { showtime: { include: { auditorium: { include: { branch: true } } } }, seats: true },
       });
       const byBranch = new Map<string, { name: string; revenue: number; tickets: number; bookings: number }>();
@@ -92,7 +103,7 @@ async function buildReport(key: string): Promise<{ summary?: string; table: Tabl
 
     case "bookings-by-genre": {
       const bookings = await prisma.booking.findMany({
-        where: { status: "CONFIRMED" },
+        where: { status: "CONFIRMED", ...(createdAt ? { createdAt } : {}) },
         include: { showtime: { include: { movie: true } }, seats: true },
       });
       const byGenre = new Map<string, { revenue: number; tickets: number; bookings: number }>();
@@ -114,7 +125,7 @@ async function buildReport(key: string): Promise<{ summary?: string; table: Tabl
     }
 
     case "cinema-reviews": {
-      const reviews = await prisma.review.findMany({ include: { movie: true } });
+      const reviews = await prisma.review.findMany({ where: createdAt ? { createdAt } : undefined, include: { movie: true } });
       const byMovie = new Map<string, { title: string; approved: number; pending: number; rejected: number; ratingSum: number }>();
       for (const r of reviews) {
         const entry = byMovie.get(r.movieId) ?? { title: r.movie.title, approved: 0, pending: 0, rejected: 0, ratingSum: 0 };
@@ -137,7 +148,7 @@ async function buildReport(key: string): Promise<{ summary?: string; table: Tabl
     case "promo-code-usage": {
       const [promoCodes, bookings] = await Promise.all([
         prisma.promoCode.findMany({ orderBy: { code: "asc" } }),
-        prisma.booking.findMany({ where: { promoCodeId: { not: null } } }),
+        prisma.booking.findMany({ where: { promoCodeId: { not: null }, ...(createdAt ? { createdAt } : {}) } }),
       ]);
       const discountByPromo = new Map<string, number>();
       for (const b of bookings) {
@@ -161,7 +172,10 @@ async function buildReport(key: string): Promise<{ summary?: string; table: Tabl
     }
 
     case "space-requests": {
-      const requests = await prisma.spaceBookingRequest.findMany({ orderBy: { createdAt: "desc" } });
+      const requests = await prisma.spaceBookingRequest.findMany({
+        where: createdAt ? { createdAt } : undefined,
+        orderBy: { createdAt: "desc" },
+      });
       const statusCounts = requests.reduce<Record<string, number>>((acc, r) => {
         acc[r.status] = (acc[r.status] ?? 0) + 1;
         return acc;
@@ -185,7 +199,11 @@ async function buildReport(key: string): Promise<{ summary?: string; table: Tabl
     }
 
     case "admin-actions-by-user": {
-      const logs = await prisma.auditLog.findMany({ include: { actor: true }, orderBy: { createdAt: "desc" } });
+      const logs = await prisma.auditLog.findMany({
+        where: createdAt ? { createdAt } : undefined,
+        include: { actor: true },
+        orderBy: { createdAt: "desc" },
+      });
       const byActor = new Map<string, { name: string; role: string; count: number; lastAction: Date }>();
       for (const log of logs) {
         const key = log.actorUserId ?? "system";
@@ -213,15 +231,26 @@ async function buildReport(key: string): Promise<{ summary?: string; table: Tabl
   }
 }
 
-export default async function ReportDetailPage({ params }: { params: Promise<{ key: string }> }) {
+export default async function ReportDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ key: string }>;
+  searchParams: Promise<{ from?: string; to?: string }>;
+}) {
   const session = await getSession();
-  if (session?.role !== "MANAGER" && session?.role !== "ADMIN") redirect("/admin");
+  if (session?.role !== "SUPERVISOR" && session?.role !== "CIRCUIT_ADMIN" && session?.role !== "AUDITOR") redirect("/admin");
 
   const { key } = await params;
   const definition = getReportDefinition(key);
   if (!definition) notFound();
 
-  const report = await buildReport(key);
+  const { from: fromParam, to: toParam } = await searchParams;
+  const from = fromParam ? new Date(`${fromParam}T00:00:00`) : undefined;
+  // "to" is inclusive of the whole day, so the range filter uses the start of the next day.
+  const to = toParam ? new Date(new Date(`${toParam}T00:00:00`).getTime() + 24 * 60 * 60 * 1000) : undefined;
+
+  const report = await buildReport(key, { from, to });
   if (!report) notFound();
 
   return (
@@ -237,6 +266,25 @@ export default async function ReportDetailPage({ params }: { params: Promise<{ k
         </div>
         <DownloadCsvButton filename={`${key}.csv`} headers={report.table.headers} rows={report.table.rows} />
       </div>
+
+      <form method="get" className="mb-4 flex flex-wrap items-end gap-3 rounded-xl border border-border bg-surface p-4">
+        <div>
+          <Label htmlFor="from">From</Label>
+          <Input id="from" name="from" type="date" defaultValue={fromParam ?? ""} />
+        </div>
+        <div>
+          <Label htmlFor="to">To</Label>
+          <Input id="to" name="to" type="date" defaultValue={toParam ?? ""} />
+        </div>
+        <Button type="submit" size="md">
+          Run Report
+        </Button>
+        {(fromParam || toParam) && (
+          <Link href={`/admin/reports/${key}`} className="pb-2.5 text-sm text-muted hover:text-brand-light">
+            Clear
+          </Link>
+        )}
+      </form>
 
       {report.summary && <p className="mb-4 text-sm font-medium text-brand-light">{report.summary}</p>}
 

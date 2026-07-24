@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 
 export default async function AdminNotificationsPage() {
   const session = await getSession();
-  if (session?.role !== "MANAGER" && session?.role !== "ADMIN") redirect("/admin");
+  if (session?.role !== "SUPERVISOR" && session?.role !== "CIRCUIT_ADMIN") redirect("/admin");
 
   const notifications = await prisma.notificationOutbox.findMany({ orderBy: { createdAt: "desc" }, take: 100 });
 

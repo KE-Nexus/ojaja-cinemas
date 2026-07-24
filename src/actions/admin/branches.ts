@@ -30,7 +30,7 @@ function parseBranchForm(formData: FormData) {
 }
 
 export async function createBranchAction(_prev: FormState, formData: FormData): Promise<FormState> {
-  const session = await requireRole(["MANAGER", "ADMIN"]);
+  const session = await requireRole(["SUPERVISOR", "CIRCUIT_ADMIN"]);
   const parsed = parseBranchForm(formData);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Please check the form." };
 
@@ -60,7 +60,7 @@ export async function createBranchAction(_prev: FormState, formData: FormData): 
 }
 
 export async function updateBranchAction(_prev: FormState, formData: FormData): Promise<FormState> {
-  const session = await requireRole(["MANAGER", "ADMIN"]);
+  const session = await requireRole(["SUPERVISOR", "CIRCUIT_ADMIN"]);
   const id = String(formData.get("id"));
   const parsed = parseBranchForm(formData);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Please check the form." };
@@ -84,7 +84,7 @@ export async function updateBranchAction(_prev: FormState, formData: FormData): 
 }
 
 export async function deleteBranchAction(id: string) {
-  const session = await requireRole(["ADMIN"]);
+  const session = await requireRole(["CIRCUIT_ADMIN"]);
   await prisma.branch.delete({ where: { id } });
   await logAdminAction(session.sub, "DELETE", "Branch", id);
   revalidatePath("/admin/locations");

@@ -53,6 +53,7 @@ export const movieSchema = z.object({
   runtimeMins: z.coerce.number().int().min(1).max(600),
   cast: z.string().min(1, "Cast is required").max(500),
   director: z.string().max(150).optional().or(z.literal("")),
+  distributor: z.string().max(150).optional().or(z.literal("")),
   releaseDate: z.string().min(1, "Release date is required"),
   status: z.enum(["NOW_SHOWING", "COMING_SOON", "ARCHIVED"]),
 });
@@ -91,6 +92,50 @@ export const promoCodeSchema = z.object({
   expiresAt: z.string().optional().or(z.literal("")),
   usageLimit: z.coerce.number().int().min(1).optional().or(z.literal("")),
   isActive: z.coerce.boolean().optional(),
+});
+
+export const filmContractSchema = z.object({
+  branchId: z.string().min(1, "Select a cinema"),
+  movieId: z.string().min(1, "Select a film"),
+  contractStartDate: z.string().min(1, "Contract start date is required"),
+});
+
+export const ticketClassSchema = z.object({
+  branchId: z.string().min(1, "Select a cinema"),
+  description: z.string().min(2, "Description is required").max(200),
+  className: z.string().min(1, "Ticket class is required").max(60),
+  type: z.string().min(1, "Type is required").max(60),
+  defaultPrice: z.coerce.number().min(0, "Enter a valid price"),
+});
+
+export const posItemSchema = z.object({
+  branchId: z.string().optional().or(z.literal("")),
+  name: z.string().min(1, "Name is required").max(120),
+  description: z.string().max(300).optional().or(z.literal("")),
+  itemClass: z.string().min(1, "Item class is required").max(60),
+  itemGroup: z.string().min(1, "Item group is required").max(60),
+  defaultPrice: z.coerce.number().min(0, "Enter a valid price"),
+});
+
+export const inviteStaffSchema = z.object({
+  name: z.string().min(2, "Name is required").max(80),
+  email: z.string().email("Enter a valid email"),
+  phone: z.string().min(7, "Enter a valid phone number").max(20),
+  role: z.enum(["TICKETER", "ACCOUNTANT", "SUPERVISOR", "TECHNICIAN", "AUDITOR", "CIRCUIT_ADMIN"]),
+  branchId: z.string().optional().or(z.literal("")),
+});
+
+export const staffEmailSchema = z.object({ email: z.string().email("Enter a valid email") });
+export const staffPasswordSchema = z.object({ password: z.string().min(8, "Password must be at least 8 characters") });
+export const staffPinSchema = z.object({ pin: z.string().regex(/^\d{4,6}$/, "PIN must be 4–6 digits") });
+export const transferStaffSchema = z.object({ branchId: z.string().min(1, "Select a cinema") });
+
+export const rosterShiftSchema = z.object({
+  staffId: z.string().min(1, "Select a staff member"),
+  branchId: z.string().min(1),
+  date: z.string().min(1, "Select a date"),
+  startTime: z.string().min(1, "Enter a start time"),
+  endTime: z.string().min(1, "Enter an end time"),
 });
 
 export const checkoutSchema = z.object({

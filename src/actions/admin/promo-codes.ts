@@ -9,7 +9,7 @@ import { promoCodeSchema } from "@/lib/validation";
 export type FormState = { error?: string } | null;
 
 export async function createPromoCodeAction(_prev: FormState, formData: FormData): Promise<FormState> {
-  const session = await requireRole(["MARKETING", "MANAGER", "ADMIN"]);
+  const session = await requireRole(["ACCOUNTANT", "SUPERVISOR", "CIRCUIT_ADMIN"]);
   const parsed = promoCodeSchema.safeParse({
     code: formData.get("code"),
     discountType: formData.get("discountType"),
@@ -38,7 +38,7 @@ export async function createPromoCodeAction(_prev: FormState, formData: FormData
 }
 
 export async function togglePromoCodeAction(id: string) {
-  const session = await requireRole(["MARKETING", "MANAGER", "ADMIN"]);
+  const session = await requireRole(["ACCOUNTANT", "SUPERVISOR", "CIRCUIT_ADMIN"]);
   const promo = await prisma.promoCode.findUnique({ where: { id } });
   if (!promo) return;
   await prisma.promoCode.update({ where: { id }, data: { isActive: !promo.isActive } });
@@ -47,7 +47,7 @@ export async function togglePromoCodeAction(id: string) {
 }
 
 export async function deletePromoCodeAction(id: string) {
-  const session = await requireRole(["MANAGER", "ADMIN"]);
+  const session = await requireRole(["SUPERVISOR", "CIRCUIT_ADMIN"]);
   await prisma.promoCode.delete({ where: { id } });
   await logAdminAction(session.sub, "DELETE", "PromoCode", id);
   revalidatePath("/admin/promo-codes");

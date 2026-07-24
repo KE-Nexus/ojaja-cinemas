@@ -87,6 +87,11 @@ export function MovieForm({ movie }: { movie?: Movie }) {
         </div>
       </div>
 
+      <div>
+        <Label htmlFor="distributor">Distributor</Label>
+        <Input id="distributor" name="distributor" defaultValue={movie?.distributor ?? ""} placeholder="e.g. Universal Pictures" />
+      </div>
+
       {state?.error && <FieldError>{state.error}</FieldError>}
 
       <Button type="submit" disabled={isPending}>

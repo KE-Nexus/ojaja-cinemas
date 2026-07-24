@@ -2,6 +2,19 @@ import { prisma } from "@/lib/prisma";
 import { formatNaira } from "@/lib/format";
 import { Ticket, TrendingUp, Armchair, Star } from "lucide-react";
 import { RevenueChart } from "@/components/admin/revenue-chart";
+import { Input, Select, Label } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import {
+  circuitPeriodBreakdown,
+  perBranchBreakdown,
+  revenuePerHeadWeekChange,
+  grossBoxOfficeToday,
+  concessionSalesToday,
+  startOfToday,
+  startOfWeek,
+  startOfMonth,
+  startOfYear,
+} from "@/lib/dashboard-metrics";
 
 function startOfDay(offset = 0) {
   const d = new Date();
@@ -10,32 +23,75 @@ function startOfDay(offset = 0) {
   return d;
 }
 
-export default async function AdminDashboardPage() {
+const PERIOD_LABELS = { daily: "Today", weekly: "This Week", monthly: "This Month", yearly: "This Year" } as const;
+const METRIC_LABELS = { sales: "Sales", ticketSales: "Ticket Sales", concessions: "Concessions", admits: "Guest Admits" } as const;
+
+function resolveOverviewRange(period: string | undefined, from: string | undefined, to: string | undefined) {
+  const now = new Date();
+  switch (period) {
+    case "week":
+      return { start: startOfWeek(), end: now };
+    case "month":
+      return { start: startOfMonth(), end: now };
+    case "year":
+      return { start: startOfYear(), end: now };
+    case "custom":
+      return {
+        start: from ? new Date(`${from}T00:00:00`) : startOfToday(),
+        end: to ? new Date(new Date(`${to}T00:00:00`).getTime() + 24 * 60 * 60 * 1000) : now,
+      };
+    default:
+      return { start: startOfToday(), end: now };
+  }
+}
+
+export default async function AdminDashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ period?: string; from?: string; to?: string }>;
+}) {
+  const { period, from, to } = await searchParams;
   const todayStart = startOfDay();
   const todayEnd = startOfDay(1);
+  const overviewRange = resolveOverviewRange(period, from, to);
 
-  const [todayBookings, pendingReviews, newSpaceRequests, todaysShowtimes, bookedSeatsToday, recentBookings] =
-    await Promise.all([
-      prisma.booking.findMany({ where: { status: "CONFIRMED", createdAt: { gte: todayStart, lt: todayEnd } } }),
-      prisma.review.count({ where: { status: "PENDING" } }),
-      prisma.spaceBookingRequest.count({ where: { status: "NEW" } }),
-      prisma.showtime.findMany({
-        where: { startTime: { gte: todayStart, lt: todayEnd } },
-        include: { auditorium: true },
-      }),
-      prisma.bookingSeat.count({
-        where: { booking: { status: "CONFIRMED", showtime: { startTime: { gte: todayStart, lt: todayEnd } } } },
-      }),
-      prisma.booking.findMany({
-        where: { status: "CONFIRMED" },
-        include: { showtime: { include: { movie: true } } },
-        orderBy: { createdAt: "desc" },
-        take: 6,
-      }),
-    ]);
+  const [
+    todayBookings,
+    pendingReviews,
+    newSpaceRequests,
+    todaysShowtimes,
+    bookedSeatsToday,
+    recentBookings,
+    circuit,
+    rph,
+    boxOfficeToday,
+    concessionsToday,
+    perBranch,
+  ] = await Promise.all([
+    prisma.booking.findMany({ where: { status: "CONFIRMED", createdAt: { gte: todayStart, lt: todayEnd } } }),
+    prisma.review.count({ where: { status: "PENDING" } }),
+    prisma.spaceBookingRequest.count({ where: { status: "NEW" } }),
+    prisma.showtime.findMany({
+      where: { startTime: { gte: todayStart, lt: todayEnd } },
+      include: { auditorium: true },
+    }),
+    prisma.bookingSeat.count({
+      where: { booking: { status: "CONFIRMED", showtime: { startTime: { gte: todayStart, lt: todayEnd } } } },
+    }),
+    prisma.booking.findMany({
+      where: { status: "CONFIRMED" },
+      include: { showtime: { include: { movie: true } } },
+      orderBy: { createdAt: "desc" },
+      take: 6,
+    }),
+    circuitPeriodBreakdown(),
+    revenuePerHeadWeekChange(),
+    grossBoxOfficeToday(),
+    concessionSalesToday(),
+    perBranchBreakdown(overviewRange.start, overviewRange.end),
+  ]);
 
   const totalSeatsToday = todaysShowtimes.reduce((sum, st) => sum + st.auditorium.rows * st.auditorium.seatsPerRow, 0);
-
   const revenue = todayBookings.reduce((sum, b) => sum + b.totalAmount, 0);
   const occupancy = totalSeatsToday > 0 ? Math.round((bookedSeatsToday / totalSeatsToday) * 100) : 0;
 
@@ -64,6 +120,115 @@ export default async function AdminDashboardPage() {
         <StatCard icon={<Star size={18} />} label="Pending Reviews" value={String(pendingReviews)} />
       </div>
 
+      {/* Data in circuit */}
+      <div className="mt-6 rounded-2xl border border-border bg-surface p-5">
+        <h2 className="mb-4 font-semibold">Data in Circuit</h2>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border text-left text-muted">
+                <th className="p-2 font-medium">Metric</th>
+                {Object.values(PERIOD_LABELS).map((label) => (
+                  <th key={label} className="p-2 font-medium">
+                    {label}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {(Object.keys(METRIC_LABELS) as (keyof typeof METRIC_LABELS)[]).map((metric) => (
+                <tr key={metric} className="border-b border-border/50 last:border-0">
+                  <td className="p-2 font-medium">{METRIC_LABELS[metric]}</td>
+                  {(Object.keys(PERIOD_LABELS) as (keyof typeof PERIOD_LABELS)[]).map((p) => (
+                    <td key={p} className="p-2 text-muted">
+                      {metric === "admits" ? circuit[p][metric] : formatNaira(circuit[p][metric])}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="mt-6 grid gap-6 lg:grid-cols-3">
+        <div className="rounded-2xl border border-border bg-surface p-5">
+          <h2 className="mb-2 font-semibold">Revenue Per Head</h2>
+          <p className="text-2xl font-semibold">{formatNaira(rph.rphThisWeek)}</p>
+          <p className="mt-1 text-xs text-muted">
+            {rph.pctChange === null ? (
+              "No data for last week to compare."
+            ) : (
+              <span className={rph.pctChange >= 0 ? "text-success" : "text-danger"}>
+                {rph.pctChange >= 0 ? "+" : ""}
+                {rph.pctChange.toFixed(1)}%
+              </span>
+            )}{" "}
+            vs. last week ({formatNaira(rph.rphLastWeek)})
+          </p>
+        </div>
+
+        <div className="rounded-2xl border border-border bg-surface p-5 lg:col-span-2">
+          <h2 className="mb-3 font-semibold">Gross Box Office Today</h2>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border text-left text-muted">
+                  <th className="p-2 font-medium">Title</th>
+                  <th className="p-2 font-medium">Price</th>
+                </tr>
+              </thead>
+              <tbody>
+                {boxOfficeToday.map((m) => (
+                  <tr key={m.title} className="border-b border-border/50 last:border-0">
+                    <td className="p-2">{m.title}</td>
+                    <td className="p-2 text-muted">{formatNaira(m.revenue)}</td>
+                  </tr>
+                ))}
+                {boxOfficeToday.length === 0 && (
+                  <tr>
+                    <td colSpan={2} className="p-4 text-center text-muted">
+                      No box office sales yet today.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-6 rounded-2xl border border-border bg-surface p-5">
+        <h2 className="mb-3 font-semibold">Concession Sales Today</h2>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border text-left text-muted">
+                <th className="p-2 font-medium">Number</th>
+                <th className="p-2 font-medium">Item</th>
+                <th className="p-2 font-medium">Total Sales</th>
+              </tr>
+            </thead>
+            <tbody>
+              {concessionsToday.map((c) => (
+                <tr key={c.name} className="border-b border-border/50 last:border-0">
+                  <td className="p-2 text-muted">{c.quantity}</td>
+                  <td className="p-2">{c.name}</td>
+                  <td className="p-2 text-muted">{formatNaira(c.total)}</td>
+                </tr>
+              ))}
+              {concessionsToday.length === 0 && (
+                <tr>
+                  <td colSpan={3} className="p-4 text-center text-muted">
+                    No concession sales yet today.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       <div className="mt-6 grid gap-6 lg:grid-cols-[2fr_1fr]">
         <div className="rounded-2xl border border-border bg-surface p-5">
           <h2 className="mb-4 font-semibold">Revenue — Last 7 Days</h2>
@@ -82,6 +247,58 @@ export default async function AdminDashboardPage() {
               <span className="font-medium">{newSpaceRequests}</span>
             </li>
           </ul>
+        </div>
+      </div>
+
+      {/* Overview by cinema */}
+      <div className="mt-6 rounded-2xl border border-border bg-surface p-5">
+        <h2 className="mb-3 font-semibold">Overview by Cinema</h2>
+
+        <form method="get" className="mb-4 flex flex-wrap items-end gap-3">
+          <div>
+            <Label>Period</Label>
+            <Select name="period" defaultValue={period ?? "today"}>
+              <option value="today">Today</option>
+              <option value="week">This Week</option>
+              <option value="month">This Month</option>
+              <option value="year">This Year</option>
+              <option value="custom">Custom</option>
+            </Select>
+          </div>
+          <div>
+            <Label>From</Label>
+            <Input name="from" type="date" defaultValue={from ?? ""} />
+          </div>
+          <div>
+            <Label>To</Label>
+            <Input name="to" type="date" defaultValue={to ?? ""} />
+          </div>
+          <Button type="submit">Search</Button>
+        </form>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border text-left text-muted">
+                <th className="p-2 font-medium">Cinema</th>
+                <th className="p-2 font-medium">Sales</th>
+                <th className="p-2 font-medium">Ticket Sales</th>
+                <th className="p-2 font-medium">Concessions</th>
+                <th className="p-2 font-medium">Guest Admits</th>
+              </tr>
+            </thead>
+            <tbody>
+              {perBranch.map((b) => (
+                <tr key={b.branchId} className="border-b border-border/50 last:border-0">
+                  <td className="p-2 font-medium">{b.branchName}</td>
+                  <td className="p-2 text-muted">{formatNaira(b.sales)}</td>
+                  <td className="p-2 text-muted">{formatNaira(b.ticketSales)}</td>
+                  <td className="p-2 text-muted">{formatNaira(b.concessions)}</td>
+                  <td className="p-2 text-muted">{b.admits}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
 
@@ -115,6 +332,10 @@ export default async function AdminDashboardPage() {
           </table>
         </div>
       </div>
+
+      <footer className="mt-8 border-t border-border pt-5 text-center text-xs text-muted">
+        OJAJA Cinemas Office &middot; Circuit Management Dashboard &middot; &copy; {new Date().getFullYear()}
+      </footer>
     </div>
   );
 }

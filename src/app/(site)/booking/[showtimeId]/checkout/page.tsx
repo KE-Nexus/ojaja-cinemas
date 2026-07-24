@@ -11,19 +11,22 @@ export default async function CheckoutPage({ params }: { params: Promise<{ showt
   const sessionId = await getBookingSessionId();
   const session = await getSession();
 
-  const [showtime, activeLocks, concessions] = await Promise.all([
+  const [showtime, activeLocks] = await Promise.all([
     prisma.showtime.findUnique({ where: { id: showtimeId }, include: { movie: true, auditorium: { include: { branch: true } } } }),
     prisma.seatLock.findMany({
       where: { showtimeId, sessionId, lockedUntil: { gt: new Date() } },
       include: { seat: true },
       orderBy: { seat: { number: "asc" } },
     }),
-    prisma.concessionItem.findMany({ where: { isActive: true } }),
   ]);
 
   if (!showtime || activeLocks.length === 0) {
     redirect(`/booking/${showtimeId}/seats`);
   }
+
+  // Concessions on offer are whatever this specific cinema has activated in its POS catalog.
+  const posItems = await prisma.posItem.findMany({ where: { branchId: showtime.auditorium.branchId } });
+  const concessions = posItems.map((p) => ({ id: p.id, name: p.name, description: p.description, price: p.defaultPrice }));
 
   const lockedSeats = activeLocks.map((lock) => ({
     id: lock.seat.id,

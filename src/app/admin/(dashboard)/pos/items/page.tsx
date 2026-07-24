@@ -1,0 +1,100 @@
+import Link from "next/link";
+import { Plus, Pencil, X } from "lucide-react";
+import { prisma } from "@/lib/prisma";
+import { Button } from "@/components/ui/button";
+import { Select } from "@/components/ui/input";
+import { formatNaira } from "@/lib/format";
+import { DeleteButton } from "@/components/admin/delete-button";
+import { deletePosItemAction } from "@/actions/admin/pos-items";
+
+export default async function AllItemsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ location?: string }>;
+}) {
+  const { location } = await searchParams;
+
+  const [items, branches] = await Promise.all([
+    prisma.posItem.findMany({
+      where: { branchId: location ? location : { not: null } },
+      include: { branch: true },
+      orderBy: { createdAt: "desc" },
+    }),
+    prisma.branch.findMany({ orderBy: { name: "asc" } }),
+  ]);
+
+  return (
+    <div>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">All Items</h1>
+          <p className="text-sm text-muted">{items.length} item{items.length === 1 ? "" : "s"} across locations</p>
+        </div>
+        <Button href="/admin/pos/items/new">
+          <Plus size={16} /> Add Item
+        </Button>
+      </div>
+
+      <form method="get" className="mb-6 flex flex-wrap items-center gap-2">
+        <Select name="location" defaultValue={location ?? ""} className="max-w-xs">
+          <option value="">All Locations</option>
+          {branches.map((b) => (
+            <option key={b.id} value={b.id}>
+              {b.name}
+            </option>
+          ))}
+        </Select>
+        <Button type="submit" variant="secondary">
+          Filter
+        </Button>
+        {location && (
+          <Link href="/admin/pos/items" className="flex items-center gap-1 text-sm text-muted hover:text-brand-light">
+            <X size={14} /> Clear
+          </Link>
+        )}
+      </form>
+
+      {items.length === 0 ? (
+        <p className="rounded-2xl border border-border bg-surface p-8 text-center text-muted">
+          {location ? "No items for this cinema." : "No location items yet."}
+        </p>
+      ) : (
+        <div className="overflow-x-auto rounded-2xl border border-border bg-surface">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border text-left text-muted">
+                <th className="p-3 font-medium">S/N</th>
+                <th className="p-3 font-medium">Name</th>
+                <th className="p-3 font-medium">Item Class</th>
+                <th className="p-3 font-medium">Item Group</th>
+                <th className="p-3 font-medium">Default Price</th>
+                <th className="p-3 font-medium">Location</th>
+                <th className="p-3 font-medium"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((it, i) => (
+                <tr key={it.id} className="border-b border-border/50">
+                  <td className="p-3 text-muted">{i + 1}</td>
+                  <td className="p-3 font-medium">{it.name}</td>
+                  <td className="p-3 text-muted">{it.itemClass}</td>
+                  <td className="p-3 text-muted">{it.itemGroup}</td>
+                  <td className="p-3 text-muted">{formatNaira(it.defaultPrice)}</td>
+                  <td className="p-3 text-muted">{it.branch?.name ?? "—"}</td>
+                  <td className="p-3">
+                    <div className="flex items-center gap-3">
+                      <Link href={`/admin/pos/items/${it.id}/edit`} className="text-muted hover:text-brand-light">
+                        <Pencil size={15} />
+                      </Link>
+                      <DeleteButton action={deletePosItemAction.bind(null, it.id)} confirmText={`Delete "${it.name}"?`} />
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}

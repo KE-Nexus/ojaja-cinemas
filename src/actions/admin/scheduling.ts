@@ -9,7 +9,7 @@ import { showtimeSchema } from "@/lib/validation";
 export type SessionFormState = { error?: string; success?: boolean } | null;
 
 export async function createSessionAction(_prev: SessionFormState, formData: FormData): Promise<SessionFormState> {
-  const session = await requireRole(["MANAGER", "ADMIN"]);
+  const session = await requireRole(["SUPERVISOR", "CIRCUIT_ADMIN"]);
   const parsed = showtimeSchema.safeParse({
     movieId: formData.get("movieId"),
     auditoriumId: formData.get("auditoriumId"),
@@ -35,14 +35,14 @@ export async function createSessionAction(_prev: SessionFormState, formData: For
 }
 
 export async function deleteSessionAction(id: string) {
-  const session = await requireRole(["MANAGER", "ADMIN"]);
+  const session = await requireRole(["SUPERVISOR", "CIRCUIT_ADMIN"]);
   await prisma.showtime.delete({ where: { id } });
   await logAdminAction(session.sub, "DELETE", "Showtime", id);
   revalidatePath("/admin/scheduling");
 }
 
 export async function deleteDaySessionsAction(auditoriumIds: string[], dayStart: string, dayEnd: string) {
-  const session = await requireRole(["MANAGER", "ADMIN"]);
+  const session = await requireRole(["SUPERVISOR", "CIRCUIT_ADMIN"]);
   const { count } = await prisma.showtime.deleteMany({
     where: {
       auditoriumId: { in: auditoriumIds },
@@ -55,7 +55,7 @@ export async function deleteDaySessionsAction(auditoriumIds: string[], dayStart:
 }
 
 export async function duplicateDayAction(auditoriumIds: string[], fromDayStart: string, toDayStart: string) {
-  const session = await requireRole(["MANAGER", "ADMIN"]);
+  const session = await requireRole(["SUPERVISOR", "CIRCUIT_ADMIN"]);
 
   const fromStart = new Date(fromDayStart);
   const fromEnd = new Date(fromStart.getTime() + 24 * 60 * 60 * 1000);

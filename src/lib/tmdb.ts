@@ -71,6 +71,7 @@ type TmdbMovieDetail = {
   release_dates?: {
     results: { iso_3166_1: string; release_dates: { certification: string; release_date: string; type: number }[] }[];
   };
+  production_companies?: { name: string }[];
 };
 
 export type ImportedMovie = {
@@ -86,6 +87,7 @@ export type ImportedMovie = {
   runtimeMins: number;
   cast: string;
   director: string | null;
+  distributor: string | null;
   releaseDate: string;
 };
 
@@ -122,6 +124,9 @@ function mapMovieDetail(detail: TmdbMovieDetail): ImportedMovie {
     runtimeMins: detail.runtime || 110,
     cast: cast.join(", ") || "Cast unavailable",
     director,
+    // TMDB has no dedicated "distributor" field — the first production company is the
+    // closest available proxy. Admins can correct it after import.
+    distributor: detail.production_companies?.[0]?.name ?? null,
     releaseDate: usTheatricalDate || detail.release_date,
   };
 }

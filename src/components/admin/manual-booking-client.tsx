@@ -106,6 +106,16 @@ export function ManualBookingClient({ showtimes }: { showtimes: ShowtimeOption[]
             </div>
           </div>
 
+          <div>
+            <Label htmlFor="paymentMethod">Payment method</Label>
+            <Select id="paymentMethod" name="paymentMethod" defaultValue="CASH" required>
+              <option value="CARD">Card</option>
+              <option value="CASH">Cash</option>
+              <option value="TRANSFER">Transfer</option>
+              <option value="VOUCHER">Ext. Voucher</option>
+            </Select>
+          </div>
+
           {state?.error && <FieldError>{state.error}</FieldError>}
 
           <Button type="submit" disabled={isPending}>

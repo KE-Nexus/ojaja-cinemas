@@ -45,6 +45,7 @@ function toMovieData(detail: ImportedMovie, slug: string, status: MovieStatus) {
     runtimeMins: detail.runtimeMins,
     cast: detail.cast,
     director: detail.director,
+    distributor: detail.distributor,
     releaseDate: new Date(detail.releaseDate),
     status,
   };
