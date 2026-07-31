@@ -2,11 +2,12 @@
 
 import { useActionState } from "react";
 import Link from "next/link";
+import { MapPin } from "lucide-react";
 import { inviteStaffAction, type FormState } from "@/actions/admin/staff";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Select, FieldError } from "@/components/ui/input";
 
-const ROLES = [
+const ALL_ROLES = [
   { value: "TICKETER", label: "Ticketer" },
   { value: "ACCOUNTANT", label: "Accountant" },
   { value: "SUPERVISOR", label: "Supervisor" },
@@ -15,8 +16,16 @@ const ROLES = [
   { value: "CIRCUIT_ADMIN", label: "Circuit Admin" },
 ];
 
-export function InviteStaffForm({ branches }: { branches: { id: string; name: string }[] }) {
+export function InviteStaffForm({
+  branches,
+  lockedBranch,
+}: {
+  branches: { id: string; name: string }[];
+  /** Non-CircuitAdmin inviters are locked to their own cinema and can't grant the Circuit Admin role. */
+  lockedBranch?: { id: string; name: string };
+}) {
   const [state, formAction, isPending] = useActionState<FormState, FormData>(inviteStaffAction, null);
+  const roles = lockedBranch ? ALL_ROLES.filter((r) => r.value !== "CIRCUIT_ADMIN") : ALL_ROLES;
 
   if (state?.success) {
     return (
@@ -55,7 +64,7 @@ export function InviteStaffForm({ branches }: { branches: { id: string; name: st
         <div>
           <Label htmlFor="role">Role</Label>
           <Select id="role" name="role" defaultValue="TICKETER" required>
-            {ROLES.map((r) => (
+            {roles.map((r) => (
               <option key={r.value} value={r.value}>
                 {r.label}
               </option>
@@ -63,15 +72,24 @@ export function InviteStaffForm({ branches }: { branches: { id: string; name: st
           </Select>
         </div>
         <div>
-          <Label htmlFor="branchId">Cinema (optional for Circuit Admin)</Label>
-          <Select id="branchId" name="branchId" defaultValue="">
-            <option value="">Circuit-wide / unassigned</option>
-            {branches.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.name}
-              </option>
-            ))}
-          </Select>
+          <Label htmlFor="branchId">Cinema</Label>
+          {lockedBranch ? (
+            <>
+              <input type="hidden" name="branchId" value={lockedBranch.id} />
+              <span className="flex items-center gap-1.5 rounded-lg border border-border bg-surface-2 px-3.5 py-2.5 text-sm text-muted">
+                <MapPin size={14} /> {lockedBranch.name}
+              </span>
+            </>
+          ) : (
+            <Select id="branchId" name="branchId" defaultValue="">
+              <option value="">Circuit-wide / unassigned</option>
+              {branches.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name}
+                </option>
+              ))}
+            </Select>
+          )}
         </div>
       </div>
 

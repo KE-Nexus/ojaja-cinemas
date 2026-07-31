@@ -1,27 +1,39 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Plus, Pencil, X } from "lucide-react";
 import { prisma } from "@/lib/prisma";
+import { getSession } from "@/lib/auth";
+import { hasClaim } from "@/lib/claims";
 import { Button } from "@/components/ui/button";
-import { Select } from "@/components/ui/input";
 import { formatNaira } from "@/lib/format";
 import { DeleteButton } from "@/components/admin/delete-button";
+import { LocationFilterField } from "@/components/admin/location-filter-field";
 import { TicketClassToggle } from "@/components/admin/ticket-class-toggle";
 import { deleteTicketClassAction } from "@/actions/admin/ticket-classes";
+import { getBranchScope, resolveScopedBranchId } from "@/lib/branch-scope";
 
 export default async function TicketClassesPage({
   searchParams,
 }: {
   searchParams: Promise<{ location?: string }>;
 }) {
+  const session = await getSession();
+  if (!session || !(await hasClaim(session.role, "CAN_VIEW_PRICECARDS"))) redirect("/admin");
+
   const { location } = await searchParams;
+
+  const scope = await getBranchScope();
+  const effectiveLocation = resolveScopedBranchId(scope, location);
 
   const [tickets, branches] = await Promise.all([
     prisma.ticketClass.findMany({
-      where: location ? { branchId: location } : undefined,
+      where: effectiveLocation ? { branchId: effectiveLocation } : undefined,
       include: { branch: true },
       orderBy: { createdAt: "desc" },
     }),
-    prisma.branch.findMany({ orderBy: { name: "asc" } }),
+    scope.isCircuitAdmin
+      ? prisma.branch.findMany({ orderBy: { name: "asc" } })
+      : prisma.branch.findMany({ where: { id: scope.branchId ?? undefined } }),
   ]);
 
   return (
@@ -37,18 +49,11 @@ export default async function TicketClassesPage({
       </div>
 
       <form method="get" className="mb-6 flex flex-wrap items-center gap-2">
-        <Select name="location" defaultValue={location ?? ""} className="max-w-xs">
-          <option value="">All Locations</option>
-          {branches.map((b) => (
-            <option key={b.id} value={b.id}>
-              {b.name}
-            </option>
-          ))}
-        </Select>
+        <LocationFilterField branches={branches} selected={effectiveLocation} locked={!scope.isCircuitAdmin} />
         <Button type="submit" variant="secondary">
           Filter
         </Button>
-        {location && (
+        {effectiveLocation && scope.isCircuitAdmin && (
           <Link href="/admin/movies/tickets" className="flex items-center gap-1 text-sm text-muted hover:text-brand-light">
             <X size={14} /> Clear
           </Link>
@@ -57,7 +62,7 @@ export default async function TicketClassesPage({
 
       {tickets.length === 0 ? (
         <p className="rounded-2xl border border-border bg-surface p-8 text-center text-muted">
-          {location ? "No ticket classes for this cinema." : "No ticket classes yet."}
+          {effectiveLocation ? "No ticket classes for this cinema." : "No ticket classes yet."}
         </p>
       ) : (
         <div className="overflow-x-auto rounded-2xl border border-border bg-surface">

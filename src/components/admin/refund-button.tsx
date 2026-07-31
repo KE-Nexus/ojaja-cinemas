@@ -21,8 +21,8 @@ export function RefundButton({ bookingId }: { bookingId: string }) {
           try {
             await refundBookingAction(bookingId);
             toast.success("Booking refunded.");
-          } catch {
-            toast.error("Failed to process refund.");
+          } catch (e) {
+            toast.error(e instanceof Error ? e.message : "Failed to process refund.");
           }
         });
       }}

@@ -5,6 +5,7 @@ import { SchedulingDayView, type ScheduleRoom } from "@/components/admin/schedul
 import { SchedulingToolbar } from "@/components/admin/scheduling-toolbar";
 import { CreateSessionModal } from "@/components/admin/create-session-modal";
 import { BranchSelectForm } from "@/components/admin/branch-select-form";
+import { getBranchScope, resolveScopedBranchId } from "@/lib/branch-scope";
 
 function dayStart(dateStr?: string) {
   const d = dateStr ? new Date(`${dateStr}T00:00:00`) : new Date();
@@ -23,8 +24,13 @@ export default async function SchedulingPage({
 }) {
   const { branch, date } = await searchParams;
 
-  const branches = await prisma.branch.findMany({ orderBy: { name: "asc" } });
-  const selectedBranch = branches.find((b) => b.id === branch) ?? branches[0];
+  const scope = await getBranchScope();
+  const effectiveBranchId = resolveScopedBranchId(scope, branch);
+
+  const branches = scope.isCircuitAdmin
+    ? await prisma.branch.findMany({ orderBy: { name: "asc" } })
+    : await prisma.branch.findMany({ where: { id: scope.branchId ?? undefined }, orderBy: { name: "asc" } });
+  const selectedBranch = branches.find((b) => b.id === effectiveBranchId) ?? branches[0];
 
   const today = dayStart(date);
   const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000);
@@ -87,7 +93,7 @@ export default async function SchedulingPage({
           <p className="text-sm text-muted">Visual room-by-room session board.</p>
         </div>
 
-        <BranchSelectForm branches={branches} selectedBranchId={selectedBranch?.id} dateParam={dateParam} />
+        <BranchSelectForm branches={branches} selectedBranchId={selectedBranch?.id} dateParam={dateParam} locked={!scope.isCircuitAdmin} />
       </div>
 
       <div className="mb-4 flex flex-wrap items-center gap-3">

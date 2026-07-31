@@ -5,11 +5,13 @@ import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Select } from "@/components/ui/input";
 import { formatNaira } from "@/lib/format";
 import { expectedTotalsForSession } from "@/lib/staff-sessions";
 import { OpenSessionButton } from "@/components/admin/open-session-button";
 import { CloseSessionModal } from "@/components/admin/close-session-modal";
+import { ReopenSessionButton } from "@/components/admin/reopen-session-button";
+import { LocationFilterField } from "@/components/admin/location-filter-field";
+import { getBranchScope, resolveScopedBranchId } from "@/lib/branch-scope";
 
 function variance(actual: number | null, expected: number) {
   if (actual === null) return null;
@@ -32,14 +34,19 @@ export default async function StaffSessionsPage({
 
   const { location } = await searchParams;
 
+  const scope = await getBranchScope();
+  const effectiveLocation = resolveScopedBranchId(scope, location);
+
   const [sessions, branches] = await Promise.all([
     prisma.staffSession.findMany({
-      where: location ? { branchId: location } : undefined,
+      where: effectiveLocation ? { branchId: effectiveLocation } : undefined,
       include: { staff: true, branch: true, closedBy: true },
       orderBy: { openedAt: "desc" },
       take: 50,
     }),
-    prisma.branch.findMany({ orderBy: { name: "asc" } }),
+    scope.isCircuitAdmin
+      ? prisma.branch.findMany({ orderBy: { name: "asc" } })
+      : prisma.branch.findMany({ where: { id: scope.branchId ?? undefined } }),
   ]);
 
   const rows = await Promise.all(
@@ -78,18 +85,11 @@ export default async function StaffSessionsPage({
       </div>
 
       <form method="get" className="mb-6 flex flex-wrap items-center gap-2">
-        <Select name="location" defaultValue={location ?? ""} className="max-w-xs">
-          <option value="">All Locations</option>
-          {branches.map((b) => (
-            <option key={b.id} value={b.id}>
-              {b.name}
-            </option>
-          ))}
-        </Select>
+        <LocationFilterField branches={branches} selected={effectiveLocation} locked={!scope.isCircuitAdmin} />
         <Button type="submit" variant="secondary">
           Filter
         </Button>
-        {location && (
+        {effectiveLocation && scope.isCircuitAdmin && (
           <Link href="/admin/staff/sessions" className="flex items-center gap-1 text-sm text-muted hover:text-brand-light">
             <X size={14} /> Clear
           </Link>
@@ -164,7 +164,13 @@ export default async function StaffSessionsPage({
                   <td className="p-3 text-muted">{s.openedAt.toLocaleString("en-NG")}</td>
                   <td className="p-3 text-muted">{s.closedBy?.name ?? "—"}</td>
                   <td className="p-3 text-muted">{s.closedAt ? s.closedAt.toLocaleString("en-NG") : "—"}</td>
-                  <td className="p-3">{s.status === "OPEN" && <CloseSessionModal id={s.id} staffName={s.staff.name} />}</td>
+                  <td className="p-3">
+                    {s.status === "OPEN" ? (
+                      <CloseSessionModal id={s.id} staffName={s.staff.name} />
+                    ) : (
+                      <ReopenSessionButton id={s.id} />
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>

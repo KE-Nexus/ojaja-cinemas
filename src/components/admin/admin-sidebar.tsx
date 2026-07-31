@@ -27,13 +27,30 @@ import {
   UserCog,
   CalendarDays,
   Wallet,
+  ShieldCheck,
+  ClipboardList,
+  PackageCheck,
+  ArrowLeftRight,
+  ShoppingCart,
+  Gift,
+  Sparkles,
 } from "lucide-react";
 import { logoutAction } from "@/actions/auth";
 import type { Role } from "@prisma/client";
+import type { ClaimKey } from "@/lib/claims";
 import { cn } from "@/lib/cn";
 import { ThemeToggle } from "@/components/theme-toggle";
 
-type NavItem = { href: string; label: string; icon: typeof LayoutDashboard; roles: Role[] | null };
+type NavItem = {
+  href: string;
+  label: string;
+  icon: typeof LayoutDashboard;
+  roles: Role[] | null;
+  /** Extra claim requirement for items whose destination page hard-gates on a claim. */
+  claim?: ClaimKey;
+  /** "or" means role-eligible OR claim-granted is enough (e.g. a page with two independent audiences). Default is "and". */
+  claimMode?: "and" | "or";
+};
 
 const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
   {
@@ -45,8 +62,8 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
     items: [
       { href: "/admin/movies", label: "Movies", icon: Film, roles: null },
       { href: "/admin/movies/contracts", label: "Film Contracts", icon: FileSignature, roles: ["SUPERVISOR", "CIRCUIT_ADMIN"] },
-      { href: "/admin/movies/tickets", label: "Tickets", icon: TicketCheck, roles: ["SUPERVISOR", "CIRCUIT_ADMIN"] },
-      { href: "/admin/showtimes", label: "Showtimes", icon: CalendarClock, roles: null },
+      { href: "/admin/movies/tickets", label: "Tickets", icon: TicketCheck, roles: ["SUPERVISOR", "CIRCUIT_ADMIN"], claim: "CAN_VIEW_PRICECARDS" },
+      { href: "/admin/showtimes", label: "Showtimes", icon: CalendarClock, roles: null, claim: "CAN_VIEW_SHOWTIMES" },
       { href: "/admin/scheduling", label: "Film Scheduling", icon: CalendarRange, roles: ["SUPERVISOR", "CIRCUIT_ADMIN"] },
       { href: "/admin/locations", label: "Locations", icon: MapPin, roles: ["SUPERVISOR", "CIRCUIT_ADMIN"] },
       { href: "/admin/auditoriums", label: "Auditoriums", icon: Armchair, roles: null },
@@ -57,6 +74,14 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
     items: [
       { href: "/admin/bookings", label: "Bookings", icon: Ticket, roles: null },
       { href: "/admin/promo-codes", label: "Promo Codes", icon: Tag, roles: ["SUPERVISOR", "CIRCUIT_ADMIN", "ACCOUNTANT"] },
+      { href: "/admin/vgd", label: "Vouchers, Gifts & Discounts", icon: Gift, roles: null, claim: "CAN_ACCESS_VGD" },
+    ],
+  },
+  {
+    label: "Loyalty",
+    items: [
+      { href: "/admin/loyalty", label: "Loyalty", icon: Star, roles: null, claim: "CAN_ACCESS_LOYALTY" },
+      { href: "/admin/loyalty/plus", label: "Loyalty Plus", icon: Sparkles, roles: null, claim: "CAN_ACCESS_LOYALTY_PLUS" },
     ],
   },
   {
@@ -64,6 +89,10 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
     items: [
       { href: "/admin/pos/ho-items", label: "HO Items", icon: Warehouse, roles: ["SUPERVISOR", "CIRCUIT_ADMIN"] },
       { href: "/admin/pos/items", label: "All Items", icon: Package, roles: ["SUPERVISOR", "CIRCUIT_ADMIN"] },
+      { href: "/admin/pos/stock-requests", label: "Stock Requests", icon: ClipboardList, roles: null, claim: "CAN_CREATE_APPROVE_STOCK_REQUEST" },
+      { href: "/admin/pos/stock-receipts", label: "Stock Receipts", icon: PackageCheck, roles: null, claim: "CAN_CREATE_APPROVE_STOCK_RECEIPT" },
+      { href: "/admin/pos/stock-transfers", label: "Stock Transfers", icon: ArrowLeftRight, roles: null, claim: "CAN_CREATE_APPROVE_STOCK_TRANSFER_RECEIPT" },
+      { href: "/admin/pos/purchase-orders", label: "Purchase Orders", icon: ShoppingCart, roles: ["SUPERVISOR", "CIRCUIT_ADMIN"] },
     ],
   },
   {
@@ -76,8 +105,15 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
   {
     label: "Insights",
     items: [
-      { href: "/admin/reports", label: "Reports", icon: BarChart3, roles: ["SUPERVISOR", "CIRCUIT_ADMIN", "AUDITOR"] },
-      { href: "/admin/notifications", label: "Notifications", icon: Bell, roles: ["SUPERVISOR", "CIRCUIT_ADMIN"] },
+      { href: "/admin/reports", label: "Reports", icon: BarChart3, roles: ["SUPERVISOR", "CIRCUIT_ADMIN", "AUDITOR"], claim: "CAN_VIEW_REPORTS" },
+      {
+        href: "/admin/notifications",
+        label: "Notifications",
+        icon: Bell,
+        roles: ["SUPERVISOR", "CIRCUIT_ADMIN"],
+        claim: "CAN_GET_SEAT_CLASS_NOTIFICATION",
+        claimMode: "or",
+      },
     ],
   },
   {
@@ -86,6 +122,7 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
       { href: "/admin/staff", label: "Staff", icon: UserCog, roles: ["SUPERVISOR", "CIRCUIT_ADMIN"] },
       { href: "/admin/staff/roster", label: "Roster", icon: CalendarDays, roles: ["SUPERVISOR", "CIRCUIT_ADMIN"] },
       { href: "/admin/staff/sessions", label: "Staff Sessions", icon: Wallet, roles: ["SUPERVISOR", "CIRCUIT_ADMIN"] },
+      { href: "/admin/staff/roles", label: "Roles", icon: ShieldCheck, roles: ["CIRCUIT_ADMIN"] },
     ],
   },
   {
@@ -97,8 +134,15 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
   },
 ];
 
-export function AdminSidebar({ name, role }: { name: string; role: Role }) {
+export function AdminSidebar({ name, role, grantedClaims }: { name: string; role: Role; grantedClaims: ClaimKey[] }) {
   const pathname = usePathname();
+  const granted = new Set(grantedClaims);
+
+  function isVisible(item: NavItem): boolean {
+    const roleOk = !item.roles || item.roles.includes(role);
+    const claimOk = !item.claim || granted.has(item.claim);
+    return item.claimMode === "or" ? roleOk || claimOk : roleOk && claimOk;
+  }
 
   // Nested routes (e.g. /admin/movies/contracts under /admin/movies) share a path prefix
   // with their parent — only the most specific matching item should light up.
@@ -116,7 +160,7 @@ export function AdminSidebar({ name, role }: { name: string; role: Role }) {
 
       <nav className="flex-1 overflow-y-auto px-3 py-4">
         {NAV_GROUPS.map((group) => {
-          const items = group.items.filter((item) => !item.roles || item.roles.includes(role));
+          const items = group.items.filter(isVisible);
           if (items.length === 0) return null;
           return (
             <div key={group.label} className="mb-4 last:mb-0">

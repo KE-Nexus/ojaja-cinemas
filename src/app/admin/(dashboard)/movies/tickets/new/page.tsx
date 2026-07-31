@@ -1,8 +1,12 @@
 import { prisma } from "@/lib/prisma";
 import { TicketClassForm } from "@/components/admin/ticket-class-form";
+import { getBranchScope } from "@/lib/branch-scope";
 
 export default async function NewTicketClassPage() {
-  const branches = await prisma.branch.findMany({ orderBy: { name: "asc" } });
+  const scope = await getBranchScope();
+  const branches = scope.isCircuitAdmin
+    ? await prisma.branch.findMany({ orderBy: { name: "asc" } })
+    : await prisma.branch.findMany({ where: { id: scope.branchId ?? undefined } });
 
   return (
     <div className="max-w-xl">

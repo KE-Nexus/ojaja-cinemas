@@ -5,9 +5,36 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/auth";
 import { logAdminAction } from "@/lib/audit";
-import { branchSchema } from "@/lib/validation";
+import { branchSchema, branchBankSchema } from "@/lib/validation";
+import { assertHasClaim } from "@/lib/claims";
 
 export type FormState = { error?: string } | null;
+
+// Bank fields only render in the form when the viewer holds the claim, so their presence
+// in formData signals intent to change them — absence means "leave untouched", not "clear".
+async function parseBankFields(session: { role: import("@prisma/client").Role }, formData: FormData) {
+  if (!formData.has("bankName") && !formData.has("bankAccountName") && !formData.has("bankAccountNumber")) {
+    return { data: null, error: null as string | null };
+  }
+  const claimError = await assertHasClaim(session.role, "CAN_UPDATE_CINEMA_BANK_ACCOUNT");
+  if (claimError) return { data: null, error: claimError };
+
+  const parsed = branchBankSchema.safeParse({
+    bankName: formData.get("bankName") || "",
+    bankAccountName: formData.get("bankAccountName") || "",
+    bankAccountNumber: formData.get("bankAccountNumber") || "",
+  });
+  if (!parsed.success) return { data: null, error: parsed.error.issues[0]?.message ?? "Please check the bank details." };
+
+  return {
+    data: {
+      bankName: parsed.data.bankName || null,
+      bankAccountName: parsed.data.bankAccountName || null,
+      bankAccountNumber: parsed.data.bankAccountNumber || null,
+    },
+    error: null,
+  };
+}
 
 function slugify(name: string) {
   return name
@@ -34,6 +61,9 @@ export async function createBranchAction(_prev: FormState, formData: FormData): 
   const parsed = parseBranchForm(formData);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Please check the form." };
 
+  const bank = await parseBankFields(session, formData);
+  if (bank.error) return { error: bank.error };
+
   const baseSlug = slugify(parsed.data.name);
   let slug = baseSlug;
   let n = 1;
@@ -51,6 +81,7 @@ export async function createBranchAction(_prev: FormState, formData: FormData): 
       openingHours: parsed.data.openingHours,
       lat: parsed.data.lat === "" ? null : parsed.data.lat,
       lng: parsed.data.lng === "" ? null : parsed.data.lng,
+      ...bank.data,
     },
   });
 
@@ -65,6 +96,9 @@ export async function updateBranchAction(_prev: FormState, formData: FormData): 
   const parsed = parseBranchForm(formData);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Please check the form." };
 
+  const bank = await parseBankFields(session, formData);
+  if (bank.error) return { error: bank.error };
+
   await prisma.branch.update({
     where: { id },
     data: {
@@ -75,6 +109,7 @@ export async function updateBranchAction(_prev: FormState, formData: FormData): 
       openingHours: parsed.data.openingHours,
       lat: parsed.data.lat === "" ? null : parsed.data.lat,
       lng: parsed.data.lng === "" ? null : parsed.data.lng,
+      ...bank.data,
     },
   });
 

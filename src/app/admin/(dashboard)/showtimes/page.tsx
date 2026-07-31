@@ -1,11 +1,17 @@
+import { redirect } from "next/navigation";
 import { Plus } from "lucide-react";
 import { prisma } from "@/lib/prisma";
+import { getSession } from "@/lib/auth";
+import { hasClaim } from "@/lib/claims";
 import { Button } from "@/components/ui/button";
 import { DeleteButton } from "@/components/admin/delete-button";
 import { deleteShowtimeAction } from "@/actions/admin/showtimes";
 import { formatNaira, formatShowtime } from "@/lib/format";
 
 export default async function AdminShowtimesPage() {
+  const session = await getSession();
+  if (!session || !(await hasClaim(session.role, "CAN_VIEW_SHOWTIMES"))) redirect("/admin");
+
   const showtimes = await prisma.showtime.findMany({
     include: { movie: true, auditorium: { include: { branch: true } } },
     orderBy: { startTime: "asc" },

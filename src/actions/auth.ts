@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import {
   createPasswordResetToken,
@@ -46,6 +47,8 @@ export async function registerAction(_prev: FormState, formData: FormData): Prom
   });
 
   await createSession({ sub: user.id, role: user.role, name: user.name, email: user.email });
+  // Clears every cached route so a stale render from a previous session/role never leaks through.
+  revalidatePath("/", "layout");
   redirect("/account");
 }
 
@@ -67,11 +70,14 @@ export async function loginAction(_prev: FormState, formData: FormData): Promise
   }
 
   await createSession({ sub: user.id, role: user.role, name: user.name, email: user.email });
+  // Clears every cached route so a stale render from a previous session/role never leaks through.
+  revalidatePath("/", "layout");
   redirect(user.role === "CUSTOMER" ? "/account" : "/admin");
 }
 
 export async function logoutAction() {
   await destroySession();
+  revalidatePath("/", "layout");
   redirect("/");
 }
 

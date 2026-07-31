@@ -15,8 +15,8 @@ export function TicketClassToggle({ id, isActive }: { id: string; isActive: bool
         try {
           await toggleTicketClassAction(id);
           setChecked((v) => !v);
-        } catch {
-          toast.error("Couldn't update status. Please try again.");
+        } catch (e) {
+          toast.error(e instanceof Error ? e.message : "Couldn't update status. Please try again.");
         }
       }}
     />

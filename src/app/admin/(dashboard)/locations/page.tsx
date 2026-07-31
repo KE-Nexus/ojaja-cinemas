@@ -1,6 +1,8 @@
 import Link from "next/link";
-import { Plus, Pencil, MapPin, Phone, Clock } from "lucide-react";
+import { Plus, Pencil, MapPin, Phone, Clock, Landmark } from "lucide-react";
 import { prisma } from "@/lib/prisma";
+import { getSession } from "@/lib/auth";
+import { hasClaim } from "@/lib/claims";
 import { Button } from "@/components/ui/button";
 import { DeleteButton } from "@/components/admin/delete-button";
 import { deleteBranchAction } from "@/actions/admin/branches";
@@ -10,6 +12,9 @@ export default async function AdminLocationsPage() {
     orderBy: { name: "asc" },
     include: { _count: { select: { auditoriums: true } } },
   });
+
+  const session = await getSession();
+  const canEditBank = session ? await hasClaim(session.role, "CAN_UPDATE_CINEMA_BANK_ACCOUNT") : false;
 
   return (
     <div>
@@ -53,6 +58,21 @@ export default async function AdminLocationsPage() {
                 <Clock size={12} className="shrink-0" /> {b.openingHours}
               </p>
             </div>
+
+            {canEditBank && (
+              <div className="mt-3 border-t border-border pt-3 text-xs text-muted">
+                <p className="mb-1 flex items-center gap-1.5 font-medium text-foreground/80">
+                  <Landmark size={12} className="shrink-0" /> Bank account
+                </p>
+                {b.bankName || b.bankAccountNumber ? (
+                  <p>
+                    {b.bankName ?? "—"} · {b.bankAccountName ?? "—"} · {b.bankAccountNumber ?? "—"}
+                  </p>
+                ) : (
+                  <p>Not set up yet.</p>
+                )}
+              </div>
+            )}
 
             <div className="mt-3 border-t border-border pt-3 text-xs text-muted">
               {b._count.auditoriums} screen{b._count.auditoriums === 1 ? "" : "s"} ·{" "}

@@ -1,7 +1,13 @@
+import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { getSession } from "@/lib/auth";
+import { hasClaim } from "@/lib/claims";
 import { ShowtimeForm } from "@/components/admin/showtime-form";
 
 export default async function NewShowtimePage() {
+  const session = await getSession();
+  if (!session || !(await hasClaim(session.role, "CAN_UPDATE_SHOWTIMES"))) redirect("/admin");
+
   const [movies, auditoriums] = await Promise.all([
     prisma.movie.findMany({ where: { status: { not: "ARCHIVED" } }, orderBy: { title: "asc" } }),
     prisma.auditorium.findMany({ include: { branch: true }, orderBy: { name: "asc" } }),

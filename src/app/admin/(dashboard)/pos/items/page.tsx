@@ -2,10 +2,11 @@ import Link from "next/link";
 import { Plus, Pencil, X } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { Button } from "@/components/ui/button";
-import { Select } from "@/components/ui/input";
 import { formatNaira } from "@/lib/format";
 import { DeleteButton } from "@/components/admin/delete-button";
+import { LocationFilterField } from "@/components/admin/location-filter-field";
 import { deletePosItemAction } from "@/actions/admin/pos-items";
+import { getBranchScope, resolveScopedBranchId } from "@/lib/branch-scope";
 
 export default async function AllItemsPage({
   searchParams,
@@ -14,13 +15,18 @@ export default async function AllItemsPage({
 }) {
   const { location } = await searchParams;
 
+  const scope = await getBranchScope();
+  const effectiveLocation = resolveScopedBranchId(scope, location);
+
   const [items, branches] = await Promise.all([
     prisma.posItem.findMany({
-      where: { branchId: location ? location : { not: null } },
+      where: { branchId: effectiveLocation ? effectiveLocation : { not: null } },
       include: { branch: true },
       orderBy: { createdAt: "desc" },
     }),
-    prisma.branch.findMany({ orderBy: { name: "asc" } }),
+    scope.isCircuitAdmin
+      ? prisma.branch.findMany({ orderBy: { name: "asc" } })
+      : prisma.branch.findMany({ where: { id: scope.branchId ?? undefined } }),
   ]);
 
   return (
@@ -36,18 +42,11 @@ export default async function AllItemsPage({
       </div>
 
       <form method="get" className="mb-6 flex flex-wrap items-center gap-2">
-        <Select name="location" defaultValue={location ?? ""} className="max-w-xs">
-          <option value="">All Locations</option>
-          {branches.map((b) => (
-            <option key={b.id} value={b.id}>
-              {b.name}
-            </option>
-          ))}
-        </Select>
+        <LocationFilterField branches={branches} selected={effectiveLocation} locked={!scope.isCircuitAdmin} />
         <Button type="submit" variant="secondary">
           Filter
         </Button>
-        {location && (
+        {effectiveLocation && scope.isCircuitAdmin && (
           <Link href="/admin/pos/items" className="flex items-center gap-1 text-sm text-muted hover:text-brand-light">
             <X size={14} /> Clear
           </Link>
@@ -56,7 +55,7 @@ export default async function AllItemsPage({
 
       {items.length === 0 ? (
         <p className="rounded-2xl border border-border bg-surface p-8 text-center text-muted">
-          {location ? "No items for this cinema." : "No location items yet."}
+          {effectiveLocation ? "No items for this cinema." : "No location items yet."}
         </p>
       ) : (
         <div className="overflow-x-auto rounded-2xl border border-border bg-surface">

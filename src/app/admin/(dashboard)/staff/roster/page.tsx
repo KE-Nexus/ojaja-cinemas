@@ -6,6 +6,7 @@ import { getSession } from "@/lib/auth";
 import { BranchSelectForm } from "@/components/admin/branch-select-form";
 import { RosterToolbar } from "@/components/admin/roster-toolbar";
 import { ShiftCell } from "@/components/admin/shift-cell";
+import { getBranchScope, resolveScopedBranchId } from "@/lib/branch-scope";
 
 function weekStart(dateStr?: string) {
   const d = dateStr ? new Date(`${dateStr}T00:00:00`) : new Date();
@@ -28,8 +29,13 @@ export default async function RosterPage({
 
   const { branch, date } = await searchParams;
 
-  const branches = await prisma.branch.findMany({ orderBy: { name: "asc" } });
-  const selectedBranch = branches.find((b) => b.id === branch) ?? branches[0];
+  const scope = await getBranchScope();
+  const effectiveBranchId = resolveScopedBranchId(scope, branch);
+
+  const branches = scope.isCircuitAdmin
+    ? await prisma.branch.findMany({ orderBy: { name: "asc" } })
+    : await prisma.branch.findMany({ where: { id: scope.branchId ?? undefined }, orderBy: { name: "asc" } });
+  const selectedBranch = branches.find((b) => b.id === effectiveBranchId) ?? branches[0];
 
   const start = weekStart(date);
   const end = new Date(start.getTime() + 7 * 24 * 60 * 60 * 1000);
@@ -81,7 +87,7 @@ export default async function RosterPage({
           <h1 className="text-2xl font-bold tracking-tight">Roster</h1>
           <p className="text-sm text-muted">Weekly staff schedule by cinema.</p>
         </div>
-        <BranchSelectForm branches={branches} selectedBranchId={selectedBranch?.id} dateParam={dateParam} />
+        <BranchSelectForm branches={branches} selectedBranchId={selectedBranch?.id} dateParam={dateParam} locked={!scope.isCircuitAdmin} />
       </div>
 
       {selectedBranch && (

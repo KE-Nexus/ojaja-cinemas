@@ -17,7 +17,16 @@ import { Input, Label, Select, FieldError } from "@/components/ui/input";
 type Staff = { id: string; name: string; email: string; isActive: boolean; branchId: string | null };
 type Branch = { id: string; name: string };
 
-export function StaffActionsModal({ staff, branches }: { staff: Staff; branches: Branch[] }) {
+export function StaffActionsModal({
+  staff,
+  branches,
+  canTransfer,
+}: {
+  staff: Staff;
+  branches: Branch[];
+  /** Only a Circuit Admin can move staff between cinemas. */
+  canTransfer: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const [isActive, setIsActive] = useState(staff.isActive);
   const [isPending, startTransition] = useTransition();
@@ -71,7 +80,7 @@ export function StaffActionsModal({ staff, branches }: { staff: Staff; branches:
             <EmailForm id={staff.id} defaultEmail={staff.email} />
             <PasswordForm id={staff.id} />
             <PinForm id={staff.id} />
-            <TransferForm id={staff.id} branches={branches} defaultBranchId={staff.branchId} />
+            {canTransfer && <TransferForm id={staff.id} branches={branches} defaultBranchId={staff.branchId} />}
           </div>
         </div>
       )}

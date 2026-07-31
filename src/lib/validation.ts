@@ -77,6 +77,12 @@ export const branchSchema = z.object({
   lng: z.coerce.number().min(-180).max(180).optional().or(z.literal("")),
 });
 
+export const branchBankSchema = z.object({
+  bankName: z.string().max(100).optional().or(z.literal("")),
+  bankAccountName: z.string().max(150).optional().or(z.literal("")),
+  bankAccountNumber: z.string().max(20).optional().or(z.literal("")),
+});
+
 export const auditoriumSchema = z.object({
   branchId: z.string().min(1, "Select a branch"),
   name: z.string().min(1, "Name is required").max(60),

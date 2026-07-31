@@ -6,6 +6,7 @@ import { requireRole } from "@/lib/auth";
 import { logAdminAction } from "@/lib/audit";
 import { notificationProvider } from "@/lib/providers/notification";
 import { rosterShiftSchema } from "@/lib/validation";
+import { assertBranchAccess } from "@/lib/branch-scope";
 
 export type FormState = { error?: string; success?: boolean } | null;
 
@@ -19,6 +20,9 @@ export async function createRosterShiftAction(_prev: FormState, formData: FormDa
     endTime: formData.get("endTime"),
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Please check the form." };
+
+  const accessError = await assertBranchAccess(session.sub, session.role, parsed.data.branchId);
+  if (accessError) return { error: accessError };
 
   const date = new Date(`${parsed.data.date}T00:00:00`);
 
@@ -41,6 +45,10 @@ export async function createRosterShiftAction(_prev: FormState, formData: FormDa
 
 export async function deleteRosterShiftAction(id: string) {
   const session = await requireRole(["SUPERVISOR", "CIRCUIT_ADMIN"]);
+  const shift = await prisma.rosterShift.findUnique({ where: { id } });
+  if (!shift) return;
+  if (await assertBranchAccess(session.sub, session.role, shift.branchId)) return;
+
   await prisma.rosterShift.delete({ where: { id } });
   await logAdminAction(session.sub, "DELETE", "RosterShift", id);
   revalidatePath("/admin/staff/roster");
@@ -48,6 +56,8 @@ export async function deleteRosterShiftAction(id: string) {
 
 export async function duplicateRosterWeekAction(branchId: string, fromWeekStartISO: string, toWeekStartISO: string) {
   const session = await requireRole(["SUPERVISOR", "CIRCUIT_ADMIN"]);
+  const accessError = await assertBranchAccess(session.sub, session.role, branchId);
+  if (accessError) throw new Error(accessError);
 
   const fromStart = new Date(fromWeekStartISO);
   const fromEnd = new Date(fromStart.getTime() + 7 * 24 * 60 * 60 * 1000);
@@ -79,6 +89,8 @@ export async function duplicateRosterWeekAction(branchId: string, fromWeekStartI
 
 export async function sendRosterAction(branchId: string, weekStartISO: string) {
   const session = await requireRole(["SUPERVISOR", "CIRCUIT_ADMIN"]);
+  const accessError = await assertBranchAccess(session.sub, session.role, branchId);
+  if (accessError) throw new Error(accessError);
 
   const weekStart = new Date(weekStartISO);
   const weekEnd = new Date(weekStart.getTime() + 7 * 24 * 60 * 60 * 1000);

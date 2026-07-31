@@ -1,6 +1,7 @@
-import { PrismaClient, SeatCategory } from "@prisma/client";
+import { PrismaClient, SeatCategory, type Role } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { isTmdbConfigured, fetchNowPlaying, fetchUpcoming, type ImportedMovie } from "../src/lib/tmdb";
+import { CLAIM_DEFINITIONS, DEFAULT_ROLE_CLAIMS } from "../src/lib/claims";
 
 const prisma = new PrismaClient();
 
@@ -20,6 +21,7 @@ function slugify(title: string) {
 }
 
 type SeedMovie = {
+  tmdbId: number | null;
   slug: string;
   title: string;
   synopsis: string;
@@ -56,6 +58,7 @@ async function buildMovieSeedData(): Promise<SeedMovie[]> {
         usedSlugs.add(slug);
 
         return {
+          tmdbId: m.tmdbId,
           slug,
           title: m.title,
           synopsis: m.synopsis,
@@ -88,6 +91,7 @@ async function buildMovieSeedData(): Promise<SeedMovie[]> {
   }
 
   return MOVIES.map((m) => ({
+    tmdbId: null,
     slug: m.slug,
     title: m.title,
     synopsis: m.synopsis,
@@ -432,6 +436,7 @@ async function main() {
       where: { slug: m.slug },
       update: {},
       create: {
+        tmdbId: m.tmdbId,
         title: m.title,
         slug: m.slug,
         synopsis: m.synopsis,
@@ -548,6 +553,24 @@ async function main() {
           data: { movieId: target.id, userId: customer.id, rating: r.rating, comment: r.comment, status: "APPROVED" },
         });
       }
+    }
+  }
+
+  // ---------- Claims & default role permissions ----------
+  const claimByKey = new Map<string, string>();
+  for (const c of CLAIM_DEFINITIONS) {
+    const claim = await prisma.claim.upsert({ where: { key: c.key }, update: { label: c.label }, create: c });
+    claimByKey.set(c.key, claim.id);
+  }
+  for (const [role, keys] of Object.entries(DEFAULT_ROLE_CLAIMS) as [Role, string[]][]) {
+    for (const key of keys) {
+      const claimId = claimByKey.get(key);
+      if (!claimId) continue;
+      await prisma.roleClaim.upsert({
+        where: { role_claimId: { role, claimId } },
+        update: {},
+        create: { role, claimId },
+      });
     }
   }
 

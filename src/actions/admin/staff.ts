@@ -5,6 +5,8 @@ import { prisma } from "@/lib/prisma";
 import { requireRole, hashPassword } from "@/lib/auth";
 import { logAdminAction } from "@/lib/audit";
 import { notificationProvider } from "@/lib/providers/notification";
+import { assertBranchAccess, assertStaffTargetAccess } from "@/lib/branch-scope";
+import { assertHasClaim } from "@/lib/claims";
 import {
   inviteStaffSchema,
   staffEmailSchema,
@@ -32,6 +34,14 @@ export async function inviteStaffAction(_prev: FormState, formData: FormData): P
     branchId: formData.get("branchId") || "",
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Please check the form." };
+
+  // Non-CircuitAdmin can only invite staff to their own cinema, and can never grant Circuit Admin.
+  if (session.role !== "CIRCUIT_ADMIN") {
+    if (parsed.data.role === "CIRCUIT_ADMIN") return { error: "Only a Circuit Admin can grant that role." };
+    if (!parsed.data.branchId) return { error: "Select a cinema." };
+    const accessError = await assertBranchAccess(session.sub, session.role, parsed.data.branchId);
+    if (accessError) return { error: accessError };
+  }
 
   const existing = await prisma.user.findUnique({ where: { email: parsed.data.email } });
   if (existing) return { error: "A user with that email already exists." };
@@ -66,6 +76,8 @@ export async function inviteStaffAction(_prev: FormState, formData: FormData): P
 
 export async function toggleStaffStatusAction(id: string) {
   const session = await requireRole(["SUPERVISOR", "CIRCUIT_ADMIN"]);
+  if (await assertStaffTargetAccess(session.sub, session.role, id)) return;
+
   const staff = await prisma.user.findUnique({ where: { id } });
   if (!staff) return;
   await prisma.user.update({ where: { id }, data: { isActive: !staff.isActive } });
@@ -75,7 +87,12 @@ export async function toggleStaffStatusAction(id: string) {
 
 export async function updateStaffEmailAction(_prev: FormState, formData: FormData): Promise<FormState> {
   const session = await requireRole(["SUPERVISOR", "CIRCUIT_ADMIN"]);
+  const claimError = await assertHasClaim(session.role, "CAN_RESET_EMAIL");
+  if (claimError) return { error: claimError };
   const id = String(formData.get("id"));
+  const accessError = await assertStaffTargetAccess(session.sub, session.role, id);
+  if (accessError) return { error: accessError };
+
   const parsed = staffEmailSchema.safeParse({ email: formData.get("email") });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Please check the form." };
 
@@ -90,7 +107,12 @@ export async function updateStaffEmailAction(_prev: FormState, formData: FormDat
 
 export async function updateStaffPasswordAction(_prev: FormState, formData: FormData): Promise<FormState> {
   const session = await requireRole(["SUPERVISOR", "CIRCUIT_ADMIN"]);
+  const claimError = await assertHasClaim(session.role, "CAN_RESET_PASSWORD");
+  if (claimError) return { error: claimError };
   const id = String(formData.get("id"));
+  const accessError = await assertStaffTargetAccess(session.sub, session.role, id);
+  if (accessError) return { error: accessError };
+
   const parsed = staffPasswordSchema.safeParse({ password: formData.get("password") });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Please check the form." };
 
@@ -103,7 +125,12 @@ export async function updateStaffPasswordAction(_prev: FormState, formData: Form
 
 export async function updateStaffPinAction(_prev: FormState, formData: FormData): Promise<FormState> {
   const session = await requireRole(["SUPERVISOR", "CIRCUIT_ADMIN"]);
+  const claimError = await assertHasClaim(session.role, "CAN_RESET_PIN");
+  if (claimError) return { error: claimError };
   const id = String(formData.get("id"));
+  const accessError = await assertStaffTargetAccess(session.sub, session.role, id);
+  if (accessError) return { error: accessError };
+
   const parsed = staffPinSchema.safeParse({ pin: formData.get("pin") });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Please check the form." };
 
@@ -115,7 +142,9 @@ export async function updateStaffPinAction(_prev: FormState, formData: FormData)
 }
 
 export async function transferStaffAction(_prev: FormState, formData: FormData): Promise<FormState> {
-  const session = await requireRole(["SUPERVISOR", "CIRCUIT_ADMIN"]);
+  // Only a Circuit Admin can move staff between cinemas — a branch-scoped Supervisor
+  // can't see the destination branch's data, so they can't be the one authorizing it.
+  const session = await requireRole(["CIRCUIT_ADMIN"]);
   const id = String(formData.get("id"));
   const parsed = transferStaffSchema.safeParse({ branchId: formData.get("branchId") });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Please check the form." };

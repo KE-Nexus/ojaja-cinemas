@@ -2,9 +2,11 @@ import Link from "next/link";
 import { Plus, Pencil, Search, X } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { Button } from "@/components/ui/button";
-import { Input, Select } from "@/components/ui/input";
+import { Input } from "@/components/ui/input";
 import { DeleteButton } from "@/components/admin/delete-button";
+import { LocationFilterField } from "@/components/admin/location-filter-field";
 import { deleteFilmContractAction } from "@/actions/admin/film-contracts";
+import { getBranchScope, resolveScopedBranchId } from "@/lib/branch-scope";
 
 const PAGE_SIZE = 15;
 
@@ -17,8 +19,11 @@ export default async function FilmContractsPage({
   const query = q?.trim() ?? "";
   const pageNum = Math.max(1, Number(page) || 1);
 
+  const scope = await getBranchScope();
+  const effectiveLocation = resolveScopedBranchId(scope, location);
+
   const where = {
-    ...(location ? { branchId: location } : {}),
+    ...(effectiveLocation ? { branchId: effectiveLocation } : {}),
     ...(query ? { movie: { title: { contains: query } } } : {}),
   };
 
@@ -31,11 +36,13 @@ export default async function FilmContractsPage({
       take: PAGE_SIZE,
     }),
     prisma.filmContract.count({ where }),
-    prisma.branch.findMany({ orderBy: { name: "asc" } }),
+    scope.isCircuitAdmin
+      ? prisma.branch.findMany({ orderBy: { name: "asc" } })
+      : prisma.branch.findMany({ where: { id: scope.branchId ?? undefined } }),
   ]);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  const hasFilters = Boolean(query || location);
+  const hasFilters = Boolean(query || effectiveLocation);
 
   const buildHref = (params: Record<string, string>) => {
     const sp = new URLSearchParams();
@@ -62,14 +69,7 @@ export default async function FilmContractsPage({
           <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
           <Input name="q" defaultValue={query} placeholder="Search by film title..." className="pl-9" />
         </div>
-        <Select name="location" defaultValue={location ?? ""} className="max-w-xs">
-          <option value="">All Locations</option>
-          {branches.map((b) => (
-            <option key={b.id} value={b.id}>
-              {b.name}
-            </option>
-          ))}
-        </Select>
+        <LocationFilterField branches={branches} selected={effectiveLocation} locked={!scope.isCircuitAdmin} />
         <Button type="submit" variant="secondary">
           Filter
         </Button>

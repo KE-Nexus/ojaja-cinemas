@@ -1,8 +1,12 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { getSession } from "@/lib/auth";
+import { hasClaim } from "@/lib/claims";
 import { Badge } from "@/components/ui/badge";
 import { RefundButton } from "@/components/admin/refund-button";
+import { TicketSwapModal } from "@/components/admin/ticket-swap-modal";
 import { formatNaira, formatShowtime } from "@/lib/format";
+import type { SeatMapSeat } from "@/components/seat-map";
 
 const STATUS_TONE = {
   CONFIRMED: "success",
@@ -18,7 +22,7 @@ export default async function AdminBookingDetailPage({ params }: { params: Promi
   const booking = await prisma.booking.findUnique({
     where: { reference },
     include: {
-      showtime: { include: { movie: true, auditorium: { include: { branch: true } } } },
+      showtime: { include: { movie: true, auditorium: { include: { branch: true, seats: true } } } },
       seats: { include: { seat: true } },
       concessions: { include: { posItem: true } },
       payments: true,
@@ -26,6 +30,34 @@ export default async function AdminBookingDetailPage({ params }: { params: Promi
     },
   });
   if (!booking) notFound();
+
+  const session = await getSession();
+  const canSwapTickets = session ? await hasClaim(session.role, "CAN_SWAP_TICKETS") : false;
+
+  let swapProps: { seats: SeatMapSeat[]; rows: string[]; seatsPerRow: number; currentSeatIds: string[] } | null = null;
+  if (canSwapTickets && booking.status === "CONFIRMED") {
+    const otherBookedSeatIds = new Set(
+      (
+        await prisma.bookingSeat.findMany({
+          where: { booking: { showtimeId: booking.showtimeId, status: { in: ["PENDING", "CONFIRMED"] }, id: { not: booking.id } } },
+          select: { seatId: true },
+        })
+      ).map((s) => s.seatId)
+    );
+    const seats: SeatMapSeat[] = booking.showtime.auditorium.seats.map((seat) => ({
+      id: seat.id,
+      row: seat.row,
+      number: seat.number,
+      category: seat.category,
+      status: otherBookedSeatIds.has(seat.id) ? "BOOKED" : "AVAILABLE",
+    }));
+    swapProps = {
+      seats,
+      rows: Array.from(new Set(booking.showtime.auditorium.seats.map((s) => s.row))).sort(),
+      seatsPerRow: booking.showtime.auditorium.seatsPerRow,
+      currentSeatIds: booking.seats.map((s) => s.seatId),
+    };
+  }
 
   return (
     <div className="max-w-2xl">
@@ -61,7 +93,19 @@ export default async function AdminBookingDetailPage({ params }: { params: Promi
             </div>
             <div>
               <dt className="text-muted">Seats</dt>
-              <dd>{booking.seats.map((s) => `${s.seat.row}${s.seat.number}`).join(", ")}</dd>
+              <dd className="flex items-center gap-2">
+                {booking.seats.map((s) => `${s.seat.row}${s.seat.number}`).join(", ")}
+                {swapProps && (
+                  <TicketSwapModal
+                    bookingId={booking.id}
+                    seats={swapProps.seats}
+                    rows={swapProps.rows}
+                    seatsPerRow={swapProps.seatsPerRow}
+                    currentSeatIds={swapProps.currentSeatIds}
+                    seatLimit={swapProps.currentSeatIds.length}
+                  />
+                )}
+              </dd>
             </div>
             <div>
               <dt className="text-muted">Total</dt>

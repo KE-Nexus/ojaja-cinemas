@@ -13,6 +13,7 @@ import {
 } from "@/lib/booking";
 import { paymentProvider } from "@/lib/providers/payment";
 import { notificationProvider } from "@/lib/providers/notification";
+import { notifySeatClassSubscribers } from "@/lib/seat-class-notify";
 import { checkoutSchema, lockSeatsSchema } from "@/lib/validation";
 import { formatNaira, formatShowtime } from "@/lib/format";
 
@@ -144,7 +145,7 @@ export async function createPendingBookingAction(_prev: FormState, formData: For
 async function getBookingOr404(reference: string) {
   const booking = await prisma.booking.findUnique({
     where: { reference },
-    include: { showtime: { include: { movie: true } } },
+    include: { showtime: { include: { movie: true, auditorium: true } }, seats: { include: { seat: true } } },
   });
   return booking;
 }
@@ -196,6 +197,14 @@ export async function confirmPaymentAction(reference: string, outcome: "success"
         `OJAJA Cinemas: Booking ${booking.reference} confirmed for ${booking.showtime.movie.title}. See you at the movies!`
       );
     }
+
+    await notifySeatClassSubscribers({
+      branchId: booking.showtime.auditorium.branchId,
+      categories: booking.seats.map((s) => s.seat.category),
+      bookingReference: booking.reference,
+      movieTitle: booking.showtime.movie.title,
+      showtimeStart: booking.showtime.startTime,
+    });
 
     redirect(`/booking/confirmation/${booking.reference}`);
   } else {

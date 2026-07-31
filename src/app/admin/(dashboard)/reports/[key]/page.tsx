@@ -2,6 +2,7 @@ import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { getSession } from "@/lib/auth";
+import { hasClaim } from "@/lib/claims";
 import { prisma } from "@/lib/prisma";
 import { getReportDefinition } from "@/lib/admin-reports";
 import { DownloadCsvButton } from "@/components/admin/download-csv-button";
@@ -240,6 +241,7 @@ export default async function ReportDetailPage({
 }) {
   const session = await getSession();
   if (session?.role !== "SUPERVISOR" && session?.role !== "CIRCUIT_ADMIN" && session?.role !== "AUDITOR") redirect("/admin");
+  if (!(await hasClaim(session.role, "CAN_VIEW_REPORTS"))) redirect("/admin");
 
   const { key } = await params;
   const definition = getReportDefinition(key);

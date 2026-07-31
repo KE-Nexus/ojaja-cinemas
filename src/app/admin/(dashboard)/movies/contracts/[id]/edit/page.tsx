@@ -1,15 +1,20 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { FilmContractForm } from "@/components/admin/film-contract-form";
+import { getBranchScope } from "@/lib/branch-scope";
 
 export default async function EditFilmContractPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const scope = await getBranchScope();
   const [contract, branches, movies] = await Promise.all([
     prisma.filmContract.findUnique({ where: { id } }),
-    prisma.branch.findMany({ orderBy: { name: "asc" } }),
+    scope.isCircuitAdmin
+      ? prisma.branch.findMany({ orderBy: { name: "asc" } })
+      : prisma.branch.findMany({ where: { id: scope.branchId ?? undefined } }),
     prisma.movie.findMany({ orderBy: { title: "asc" }, select: { id: true, title: true } }),
   ]);
   if (!contract) notFound();
+  if (!scope.isCircuitAdmin && contract.branchId !== scope.branchId) notFound();
 
   return (
     <div className="max-w-xl">

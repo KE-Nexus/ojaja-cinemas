@@ -19,6 +19,7 @@ enum Role {
   SUPERVISOR
   TECHNICIAN
   AUDITOR
+  DRIVER
   CIRCUIT_ADMIN
 }
 
@@ -89,6 +90,41 @@ enum NotificationStatus {
   FAILED
 }
 
+enum StockRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum StockReceiptStatus {
+  PENDING
+  APPROVED
+}
+
+enum StockTransferStatus {
+  PENDING
+  APPROVED
+}
+
+enum PurchaseOrderStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum VgdType {
+  VOUCHER
+  GIFT_CARD
+  DISCOUNT
+}
+
+enum VgdStatus {
+  ACTIVE
+  REDEEMED
+  EXPIRED
+  CANCELLED
+}
+
 // ---------- Core ----------
 
 model User {
@@ -115,6 +151,22 @@ model User {
   staffSessions       StaffSession[] @relation("StaffSessionStaff")
   closedStaffSessions StaffSession[] @relation("StaffSessionClosedBy")
 
+  stockRequestsRequested   StockRequest[]         @relation("StockRequestRequestedBy")
+  stockRequestsApproved    StockRequest[]         @relation("StockRequestApprovedBy")
+  stockReceiptsReceived    StockReceipt[]         @relation("StockReceiptReceivedBy")
+  stockReceiptsApproved    StockReceipt[]         @relation("StockReceiptApprovedBy")
+  stockTransfersInitiated  StockTransferReceipt[] @relation("StockTransferInitiatedBy")
+  stockTransfersApproved   StockTransferReceipt[] @relation("StockTransferApprovedBy")
+  purchaseOrdersCreated    PurchaseOrder[]        @relation("PurchaseOrderCreatedBy")
+  purchaseOrdersApproved   PurchaseOrder[]        @relation("PurchaseOrderApprovedBy")
+  vgdIssued                VgdRecord[]            @relation("VgdIssuedBy")
+  vgdRedeemed              VgdRecord[]            @relation("VgdRedeemedBy")
+  loyaltyAdjustmentsReceived LoyaltyAdjustment[]   @relation("LoyaltyAdjustmentUser")
+  loyaltyAdjustmentsMade     LoyaltyAdjustment[]   @relation("LoyaltyAdjustmentStaff")
+  loyaltyRedemptionsReceived LoyaltyRedemption[]   @relation("LoyaltyRedemptionUser")
+  loyaltyRedemptionsProcessed LoyaltyRedemption[]  @relation("LoyaltyRedemptionStaff")
+  seatClassSubscriptions  SeatClassSubscription[]
+
   @@index([branchId])
 }
 
@@ -128,6 +180,9 @@ model Branch {
   openingHours  String
   lat           Float?
   lng           Float?
+  bankName          String?
+  bankAccountName   String?
+  bankAccountNumber String?
   createdAt     DateTime      @default(now())
 
   auditoriums    Auditorium[]
@@ -137,6 +192,13 @@ model Branch {
   staff          User[]
   rosterShifts   RosterShift[]
   staffSessions  StaffSession[]
+
+  stockRequests       StockRequest[]
+  stockReceipts       StockReceipt[]
+  stockTransfersFrom  StockTransferReceipt[] @relation("StockTransferFromBranch")
+  stockTransfersTo    StockTransferReceipt[] @relation("StockTransferToBranch")
+  purchaseOrders      PurchaseOrder[]
+  vgdRecords          VgdRecord[]
 }
 
 model Auditorium {
@@ -414,10 +476,15 @@ model PosItem {
   itemClass    String
   itemGroup    String
   defaultPrice Float
+  stockOnHand  Int      @default(0)
   createdAt    DateTime @default(now())
 
   branch             Branch?             @relation(fields: [branchId], references: [id], onDelete: Cascade)
   bookingConcessions BookingConcession[]
+  stockRequestLines  StockRequestLine[]
+  stockReceiptLines  StockReceiptLine[]
+  stockTransferLines StockTransferLine[]
+  purchaseOrderLines PurchaseOrderLine[]
 
   @@index([branchId])
 }
@@ -460,4 +527,238 @@ model StaffSession {
 
   @@index([branchId])
   @@index([staffId])
+}
+
+// A fixed catalog of grantable permissions ("Is Circuit Staff", "Can Refund On POS", ...).
+// CircuitAdmin can grant/revoke a claim's presence on a Role via RoleClaim — the actual
+// permission check (requireClaim) treats CircuitAdmin as always-granted regardless of
+// what's toggled here, so misconfiguring claims can never lock the admin out.
+model Claim {
+  id        String      @id @default(cuid())
+  key       String      @unique
+  label     String
+  createdAt DateTime    @default(now())
+
+  roleClaims RoleClaim[]
+}
+
+model RoleClaim {
+  id        String   @id @default(cuid())
+  role      Role
+  claimId   String
+  createdAt DateTime @default(now())
+
+  claim     Claim    @relation(fields: [claimId], references: [id], onDelete: Cascade)
+
+  @@unique([role, claimId])
+  @@index([role])
+}
+
+// ---------- Stock & Procurement ----------
+// A branch requests more stock of specific items from HO; approving a request is an
+// authorization step only — the actual stock-on-hand only changes when a Stock Receipt
+// (goods physically arrived) or Stock Transfer (moved from another branch) is approved.
+
+model StockRequest {
+  id            String             @id @default(cuid())
+  branchId      String
+  status        StockRequestStatus @default(PENDING)
+  requestedById String
+  approvedById  String?
+  approvedAt    DateTime?
+  note          String?
+  createdAt     DateTime           @default(now())
+
+  branch      Branch             @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  requestedBy User               @relation("StockRequestRequestedBy", fields: [requestedById], references: [id])
+  approvedBy  User?              @relation("StockRequestApprovedBy", fields: [approvedById], references: [id])
+  lines       StockRequestLine[]
+  receipts    StockReceipt[]
+
+  @@index([branchId])
+}
+
+model StockRequestLine {
+  id             String @id @default(cuid())
+  stockRequestId String
+  posItemId      String
+  quantity       Int
+
+  stockRequest StockRequest @relation(fields: [stockRequestId], references: [id], onDelete: Cascade)
+  posItem      PosItem      @relation(fields: [posItemId], references: [id])
+}
+
+model StockReceipt {
+  id             String             @id @default(cuid())
+  branchId       String
+  stockRequestId String?
+  status         StockReceiptStatus @default(PENDING)
+  receivedById   String
+  approvedById   String?
+  approvedAt     DateTime?
+  createdAt      DateTime           @default(now())
+
+  branch       Branch             @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  stockRequest StockRequest?      @relation(fields: [stockRequestId], references: [id])
+  receivedBy   User               @relation("StockReceiptReceivedBy", fields: [receivedById], references: [id])
+  approvedBy   User?              @relation("StockReceiptApprovedBy", fields: [approvedById], references: [id])
+  lines        StockReceiptLine[]
+
+  @@index([branchId])
+}
+
+model StockReceiptLine {
+  id             String @id @default(cuid())
+  stockReceiptId String
+  posItemId      String
+  quantity       Int
+
+  stockReceipt StockReceipt @relation(fields: [stockReceiptId], references: [id], onDelete: Cascade)
+  posItem      PosItem      @relation(fields: [posItemId], references: [id])
+}
+
+model StockTransferReceipt {
+  id            String              @id @default(cuid())
+  fromBranchId  String
+  toBranchId    String
+  status        StockTransferStatus @default(PENDING)
+  initiatedById String
+  approvedById  String?
+  approvedAt    DateTime?
+  createdAt     DateTime            @default(now())
+
+  fromBranch  Branch              @relation("StockTransferFromBranch", fields: [fromBranchId], references: [id])
+  toBranch    Branch              @relation("StockTransferToBranch", fields: [toBranchId], references: [id])
+  initiatedBy User                @relation("StockTransferInitiatedBy", fields: [initiatedById], references: [id])
+  approvedBy  User?               @relation("StockTransferApprovedBy", fields: [approvedById], references: [id])
+  lines       StockTransferLine[]
+}
+
+model StockTransferLine {
+  id                     String @id @default(cuid())
+  stockTransferReceiptId String
+  posItemId              String // the source (fromBranch) item being moved
+  quantity               Int
+
+  stockTransferReceipt StockTransferReceipt @relation(fields: [stockTransferReceiptId], references: [id], onDelete: Cascade)
+  posItem              PosItem              @relation(fields: [posItemId], references: [id])
+}
+
+model PurchaseOrder {
+  id           String              @id @default(cuid())
+  branchId     String
+  supplierName String
+  status       PurchaseOrderStatus @default(PENDING)
+  createdById  String
+  approvedById String?
+  approvedAt   DateTime?
+  createdAt    DateTime            @default(now())
+
+  branch     Branch              @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  createdBy  User                @relation("PurchaseOrderCreatedBy", fields: [createdById], references: [id])
+  approvedBy User?               @relation("PurchaseOrderApprovedBy", fields: [approvedById], references: [id])
+  lines      PurchaseOrderLine[]
+
+  @@index([branchId])
+}
+
+model PurchaseOrderLine {
+  id              String @id @default(cuid())
+  purchaseOrderId String
+  posItemId       String
+  quantity        Int
+  unitCost        Float
+
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  posItem       PosItem       @relation(fields: [posItemId], references: [id])
+}
+
+// ---------- Vouchers, Gifts & Discounts (VGD) ----------
+// Distinct from PromoCode (customer-facing, self-service codes at checkout) — these are
+// staff-issued goodwill vouchers, gift cards, or one-off discounts handed out in person.
+
+model VgdRecord {
+  id            String    @id @default(cuid())
+  type          VgdType
+  code          String    @unique
+  value         Float
+  isPercent     Boolean   @default(false)
+  branchId      String?
+  issuedById    String
+  redeemedById  String?
+  redeemedAt    DateTime?
+  status        VgdStatus @default(ACTIVE)
+  recipientName String?
+  note          String?
+  expiresAt     DateTime?
+  createdAt     DateTime  @default(now())
+
+  branch     Branch? @relation(fields: [branchId], references: [id])
+  issuedBy   User    @relation("VgdIssuedBy", fields: [issuedById], references: [id])
+  redeemedBy User?   @relation("VgdRedeemedBy", fields: [redeemedById], references: [id])
+
+  @@index([branchId])
+}
+
+// ---------- Loyalty ----------
+
+model LoyaltyTier {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  minPoints Int
+  perks     String?
+  createdAt DateTime @default(now())
+}
+
+model LoyaltyReward {
+  id          String   @id @default(cuid())
+  name        String
+  pointsCost  Int
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  redemptions LoyaltyRedemption[]
+}
+
+model LoyaltyRedemption {
+  id           String   @id @default(cuid())
+  userId       String
+  rewardId     String
+  pointsSpent  Int
+  redeemedById String
+  createdAt    DateTime @default(now())
+
+  user       User          @relation("LoyaltyRedemptionUser", fields: [userId], references: [id])
+  reward     LoyaltyReward @relation(fields: [rewardId], references: [id])
+  redeemedBy User          @relation("LoyaltyRedemptionStaff", fields: [redeemedById], references: [id])
+
+  @@index([userId])
+}
+
+model LoyaltyAdjustment {
+  id           String   @id @default(cuid())
+  userId       String
+  delta        Int
+  reason       String
+  adjustedById String
+  createdAt    DateTime @default(now())
+
+  user       User @relation("LoyaltyAdjustmentUser", fields: [userId], references: [id])
+  adjustedBy User @relation("LoyaltyAdjustmentStaff", fields: [adjustedById], references: [id])
+
+  @@index([userId])
+}
+
+// ---------- Seat class notifications ----------
+
+model SeatClassSubscription {
+  id        String       @id @default(cuid())
+  userId    String
+  category  SeatCategory
+  createdAt DateTime     @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, category])
 }

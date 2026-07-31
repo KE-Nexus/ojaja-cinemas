@@ -6,11 +6,15 @@ import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/auth";
 import { logAdminAction } from "@/lib/audit";
 import { showtimeSchema } from "@/lib/validation";
+import { assertHasClaim } from "@/lib/claims";
 
 export type FormState = { error?: string } | null;
 
 export async function createShowtimeAction(_prev: FormState, formData: FormData): Promise<FormState> {
   const session = await requireRole(["SUPERVISOR", "CIRCUIT_ADMIN"]);
+  const claimError = await assertHasClaim(session.role, "CAN_UPDATE_SHOWTIMES");
+  if (claimError) return { error: claimError };
+
   const parsed = showtimeSchema.safeParse({
     movieId: formData.get("movieId"),
     auditoriumId: formData.get("auditoriumId"),
@@ -32,6 +36,9 @@ export async function createShowtimeAction(_prev: FormState, formData: FormData)
 
 export async function deleteShowtimeAction(id: string) {
   const session = await requireRole(["SUPERVISOR", "CIRCUIT_ADMIN"]);
+  const claimError = await assertHasClaim(session.role, "CAN_UPDATE_SHOWTIMES");
+  if (claimError) throw new Error(claimError);
+
   await prisma.showtime.delete({ where: { id } });
   await logAdminAction(session.sub, "DELETE", "Showtime", id);
   revalidatePath("/admin/showtimes");

@@ -1,9 +1,13 @@
 import { prisma } from "@/lib/prisma";
 import { FilmContractForm } from "@/components/admin/film-contract-form";
+import { getBranchScope } from "@/lib/branch-scope";
 
 export default async function NewFilmContractPage() {
+  const scope = await getBranchScope();
   const [branches, movies] = await Promise.all([
-    prisma.branch.findMany({ orderBy: { name: "asc" } }),
+    scope.isCircuitAdmin
+      ? prisma.branch.findMany({ orderBy: { name: "asc" } })
+      : prisma.branch.findMany({ where: { id: scope.branchId ?? undefined } }),
     prisma.movie.findMany({ orderBy: { title: "asc" }, select: { id: true, title: true } }),
   ]);
 

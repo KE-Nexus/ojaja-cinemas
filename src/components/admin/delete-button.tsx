@@ -16,8 +16,8 @@ export function DeleteButton({ action, confirmText = "Are you sure?" }: { action
         startTransition(async () => {
           try {
             await action();
-          } catch {
-            toast.error("Something went wrong. Please try again.");
+          } catch (e) {
+            toast.error(e instanceof Error ? e.message : "Something went wrong. Please try again.");
           }
         });
       }}

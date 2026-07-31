@@ -1,11 +1,13 @@
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
+import { hasClaim } from "@/lib/claims";
 import { REPORT_DEFINITIONS } from "@/lib/admin-reports";
 import { ReportList } from "@/components/admin/report-list";
 
 export default async function AdminReportsPage() {
   const session = await getSession();
   if (session?.role !== "SUPERVISOR" && session?.role !== "CIRCUIT_ADMIN" && session?.role !== "AUDITOR") redirect("/admin");
+  if (!(await hasClaim(session.role, "CAN_VIEW_REPORTS"))) redirect("/admin");
 
   return (
     <div>

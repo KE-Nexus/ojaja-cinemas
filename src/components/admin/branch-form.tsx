@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input, Label, Textarea, FieldError } from "@/components/ui/input";
 import type { Branch } from "@prisma/client";
 
-export function BranchForm({ branch }: { branch?: Branch }) {
+export function BranchForm({ branch, canEditBank = false }: { branch?: Branch; canEditBank?: boolean }) {
   const action = branch ? updateBranchAction : createBranchAction;
   const [state, formAction, isPending] = useActionState<FormState, FormData>(action, null);
 
@@ -51,6 +51,26 @@ export function BranchForm({ branch }: { branch?: Branch }) {
           <Input id="lng" name="lng" type="number" step="any" defaultValue={branch?.lng ?? ""} />
         </div>
       </div>
+
+      {canEditBank && (
+        <div className="rounded-lg border border-border bg-surface-2/40 p-4">
+          <p className="mb-3 text-sm font-medium">Cinema bank account</p>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <Label htmlFor="bankName">Bank name</Label>
+              <Input id="bankName" name="bankName" defaultValue={branch?.bankName ?? ""} placeholder="First Bank" />
+            </div>
+            <div>
+              <Label htmlFor="bankAccountName">Account name</Label>
+              <Input id="bankAccountName" name="bankAccountName" defaultValue={branch?.bankAccountName ?? ""} placeholder="OJAJA Cinemas Ltd" />
+            </div>
+          </div>
+          <div className="mt-4">
+            <Label htmlFor="bankAccountNumber">Account number</Label>
+            <Input id="bankAccountNumber" name="bankAccountNumber" defaultValue={branch?.bankAccountNumber ?? ""} placeholder="0123456789" />
+          </div>
+        </div>
+      )}
 
       {state?.error && <FieldError>{state.error}</FieldError>}
 

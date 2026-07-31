@@ -29,8 +29,8 @@ export function SchedulingToolbar({
       try {
         const count = await deleteDaySessionsAction(auditoriumIds, dayStartISO, dayEndISO);
         toast.success(`Deleted ${count} session${count === 1 ? "" : "s"}.`);
-      } catch {
-        toast.error("Failed to delete sessions.");
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Failed to delete sessions.");
       }
     });
   }
@@ -46,8 +46,8 @@ export function SchedulingToolbar({
         toast.success(`Duplicated ${created} session${created === 1 ? "" : "s"} to ${targetDate}.`);
         setDuplicateOpen(false);
         setTargetDate("");
-      } catch {
-        toast.error("Failed to duplicate sessions.");
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Failed to duplicate sessions.");
       }
     });
   }

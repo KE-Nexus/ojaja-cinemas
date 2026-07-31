@@ -139,17 +139,12 @@ export function HeaderClient({ session, cityName }: { session: SessionPayload | 
               </AnimatePresence>
             </div>
           ) : (
-            <>
-              <Link href="/login" className="text-sm font-medium text-foreground/80 hover:text-brand-light">
-                Log in
-              </Link>
-              <Link
-                href="/register"
-                className="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white shadow-[0_4px_14px_-4px_rgba(0,0,0,0.35)] transition-colors hover:bg-brand-light active:brightness-95"
-              >
-                Sign up
-              </Link>
-            </>
+            <Link
+              href="/register"
+              className="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white shadow-[0_4px_14px_-4px_rgba(0,0,0,0.35)] transition-colors hover:bg-brand-light active:brightness-95"
+            >
+              Sign up
+            </Link>
           )}
         </div>
 
@@ -218,14 +213,9 @@ export function HeaderClient({ session, cityName }: { session: SessionPayload | 
                   </form>
                 </>
               ) : (
-                <>
-                  <Link href="/login" className="rounded-lg px-3 py-2.5 text-sm font-medium hover:bg-white/5">
-                    Log in
-                  </Link>
-                  <Link href="/register" className="rounded-lg bg-brand px-3 py-2.5 text-sm font-medium text-white">
-                    Sign up
-                  </Link>
-                </>
+                <Link href="/register" className="rounded-lg bg-brand px-3 py-2.5 text-sm font-medium text-white">
+                  Sign up
+                </Link>
               )}
             </nav>
           </motion.div>
