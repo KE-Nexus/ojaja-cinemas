@@ -29,7 +29,7 @@ export default async function MovieDetailPage({ params }: { params: Promise<{ sl
 
   const [showtimes, reviews, session] = await Promise.all([
     prisma.showtime.findMany({
-      where: { movieId: movie.id, startTime: { gte: new Date() } },
+      where: { movieId: movie.id, startTime: { gte: new Date() }, status: "OPEN" },
       include: { auditorium: { include: { branch: true } } },
       orderBy: { startTime: "asc" },
       take: 60,
@@ -53,7 +53,9 @@ export default async function MovieDetailPage({ params }: { params: Promise<{ sl
     byBranch.set(key, list);
   }
 
-  const youtubeId = movie.trailerUrl?.split("/embed/")[1];
+  const isUploadedTrailer = movie.trailerUrl?.startsWith("data:video");
+  const youtubeId = !isUploadedTrailer ? movie.trailerUrl?.split("/embed/")[1] : undefined;
+  const hasTrailer = Boolean(isUploadedTrailer || youtubeId);
 
   const jsonLd = {
     "@context": "https://schema.org",
@@ -76,7 +78,7 @@ export default async function MovieDetailPage({ params }: { params: Promise<{ sl
 
       <section className="relative flex h-[70vh] max-h-[720px] min-h-[440px] items-end overflow-hidden">
         <div className="absolute inset-0">
-          <Image src={movie.backdropUrl ?? movie.posterUrl} alt="" fill priority className="object-cover" />
+          <Image src={movie.backdropUrl ?? movie.posterUrl} alt="" fill unoptimized priority className="object-cover" />
           <div className="absolute inset-0 bg-gradient-to-t from-background via-background/50 to-transparent" />
           <div className="absolute inset-0 bg-gradient-to-r from-background/95 via-background/10 to-transparent" />
         </div>
@@ -107,7 +109,7 @@ export default async function MovieDetailPage({ params }: { params: Promise<{ sl
               >
                 <Play size={18} className="fill-black" /> Book Now
               </Link>
-              {youtubeId && (
+              {hasTrailer && (
                 <Link
                   href="#trailer"
                   className="flex items-center gap-2 rounded-md bg-white/15 px-6 py-3 text-sm font-semibold text-white backdrop-blur-sm transition-colors hover:bg-white/25"
@@ -131,17 +133,21 @@ export default async function MovieDetailPage({ params }: { params: Promise<{ sl
         </div>
       </section>
 
-      {youtubeId && (
+      {hasTrailer && (
         <section id="trailer" className="mx-auto max-w-4xl px-4 py-12 sm:px-6 lg:px-10">
           <h2 className="mb-4 text-xl font-bold tracking-tight">Trailer</h2>
           <div className="aspect-video overflow-hidden rounded-md">
-            <iframe
-              className="h-full w-full"
-              src={movie.trailerUrl ?? undefined}
-              title={`${movie.title} trailer`}
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              allowFullScreen
-            />
+            {isUploadedTrailer ? (
+              <video className="h-full w-full" src={movie.trailerUrl ?? undefined} controls />
+            ) : (
+              <iframe
+                className="h-full w-full"
+                src={movie.trailerUrl ?? undefined}
+                title={`${movie.title} trailer`}
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+              />
+            )}
           </div>
         </section>
       )}

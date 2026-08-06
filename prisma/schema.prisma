@@ -167,6 +167,7 @@ model User {
   loyaltyRedemptionsReceived LoyaltyRedemption[]   @relation("LoyaltyRedemptionUser")
   loyaltyRedemptionsProcessed LoyaltyRedemption[]  @relation("LoyaltyRedemptionStaff")
   seatClassSubscriptions  SeatClassSubscription[]
+  posConcessionSales      PosConcessionSale[]
 
   @@index([branchId])
 }
@@ -184,11 +185,17 @@ model Branch {
   bankName          String?
   bankAccountName   String?
   bankAccountNumber String?
+  email             String?
+  logoUrl           String?
+  aboutUs           String?
+  useFilmSchedule   Boolean       @default(true)
   createdAt     DateTime      @default(now())
 
   auditoriums    Auditorium[]
   filmContracts  FilmContract[]
   ticketClasses  TicketClass[]
+  priceCards     PriceCard[]
+  posConcessionSales PosConcessionSale[]
   posItems       PosItem[]
   staff          User[]
   rosterShifts   RosterShift[]
@@ -200,6 +207,25 @@ model Branch {
   stockTransfersTo    StockTransferReceipt[] @relation("StockTransferToBranch")
   purchaseOrders      PurchaseOrder[]
   vgdRecords          VgdRecord[]
+  images              BranchImage[]
+}
+
+enum BranchImageKind {
+  PROMOTIONAL
+  GALLERY
+}
+
+model BranchImage {
+  id        String           @id @default(cuid())
+  branchId  String
+  kind      BranchImageKind
+  dataUrl   String
+  position  Int              @default(0)
+  createdAt DateTime         @default(now())
+
+  branch Branch @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@index([branchId, kind])
 }
 
 model Auditorium {
@@ -257,19 +283,30 @@ model Movie {
   filmContracts  FilmContract[]
 }
 
-model Showtime {
-  id           String     @id @default(cuid())
-  movieId      String
-  auditoriumId String
-  startTime    DateTime
-  basePrice    Float
-  language     String
-  format       String     @default("2D")
+enum ShowtimeStatus {
+  OPEN
+  CLOSED
+}
 
-  movie        Movie      @relation(fields: [movieId], references: [id], onDelete: Cascade)
-  auditorium   Auditorium @relation(fields: [auditoriumId], references: [id], onDelete: Cascade)
-  bookings     Booking[]
-  seatLocks    SeatLock[]
+model Showtime {
+  id                  String         @id @default(cuid())
+  movieId             String
+  auditoriumId        String
+  priceCardId         String?
+  startTime           DateTime
+  endTime             DateTime?
+  basePrice           Float
+  language            String
+  format              String         @default("2D")
+  status              ShowtimeStatus @default(OPEN)
+  trailerDurationMins Int            @default(0)
+  cleanupTimeMins     Int            @default(0)
+
+  movie      Movie      @relation(fields: [movieId], references: [id], onDelete: Cascade)
+  auditorium Auditorium @relation(fields: [auditoriumId], references: [id], onDelete: Cascade)
+  priceCard  PriceCard? @relation(fields: [priceCardId], references: [id])
+  bookings   Booking[]
+  seatLocks  SeatLock[]
 
   @@index([movieId])
   @@index([auditoriumId])
@@ -452,19 +489,91 @@ model FilmContract {
   @@index([movieId])
 }
 
+enum TicketClassKind {
+  STANDARD
+  PACKAGE
+  VOUCHER
+}
+
 model TicketClass {
-  id           String   @id @default(cuid())
-  branchId     String
-  description  String
-  className    String
-  type         String
-  defaultPrice Float
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now())
+  id              String          @id @default(cuid())
+  branchId        String
+  description     String
+  type            String
+  kind            TicketClassKind @default(STANDARD)
+  seatClass       SeatCategory?
+  defaultPrice    Float
+  salesTaxPercent Float           @default(0)
+  isActive        Boolean         @default(true)
+  isLoyaltyTicket Boolean         @default(false)
+  isComplementary Boolean         @default(false)
+  salesSources    String[]        @default([])
+  createdAt       DateTime        @default(now())
 
   branch Branch @relation(fields: [branchId], references: [id], onDelete: Cascade)
 
+  // Only meaningful when kind is PACKAGE — the bundled tickets/items sold as one combo.
+  packageTicketLines TicketPackageLine[]     @relation("PackageTicketLines")
+  includedInPackages TicketPackageLine[]     @relation("IncludedTicketLines")
+  packageItemLines   TicketPackageItemLine[]
+  priceCardTickets   PriceCardTicket[]
+
   @@index([branchId])
+}
+
+model TicketPackageLine {
+  id            String @id @default(cuid())
+  packageId     String
+  ticketClassId String
+  quantity      Int    @default(1)
+
+  package     TicketClass @relation("PackageTicketLines", fields: [packageId], references: [id], onDelete: Cascade)
+  ticketClass TicketClass @relation("IncludedTicketLines", fields: [ticketClassId], references: [id], onDelete: Cascade)
+
+  @@index([packageId])
+}
+
+model TicketPackageItemLine {
+  id        String @id @default(cuid())
+  packageId String
+  posItemId String
+  quantity  Int    @default(1)
+
+  package TicketClass @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  posItem PosItem     @relation(fields: [posItemId], references: [id], onDelete: Cascade)
+
+  @@index([packageId])
+}
+
+// A day-scoped pricing profile for a cinema — which ticket types are on offer,
+// and on which day(s) of the week this profile applies ("ALL" is a pure UI
+// convenience for selecting every day, not a stored value).
+model PriceCard {
+  id          String   @id @default(cuid())
+  branchId    String
+  name        String
+  description String?
+  days        String[] @default([])
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  branch    Branch            @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  tickets   PriceCardTicket[]
+  showtimes Showtime[]
+
+  @@index([branchId])
+}
+
+model PriceCardTicket {
+  id            String @id @default(cuid())
+  priceCardId   String
+  ticketClassId String
+
+  priceCard   PriceCard   @relation(fields: [priceCardId], references: [id], onDelete: Cascade)
+  ticketClass TicketClass @relation(fields: [ticketClassId], references: [id], onDelete: Cascade)
+
+  @@unique([priceCardId, ticketClassId])
+  @@index([priceCardId])
 }
 
 // branchId null = a Head Office item in the shared master catalog ("HO Items");
@@ -478,16 +587,54 @@ model PosItem {
   itemGroup    String
   defaultPrice Float
   stockOnHand  Int      @default(0)
+  imageUrl     String?
   createdAt    DateTime @default(now())
 
-  branch             Branch?             @relation(fields: [branchId], references: [id], onDelete: Cascade)
-  bookingConcessions BookingConcession[]
-  stockRequestLines  StockRequestLine[]
-  stockReceiptLines  StockReceiptLine[]
-  stockTransferLines StockTransferLine[]
-  purchaseOrderLines PurchaseOrderLine[]
+  branch                 Branch?                 @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  bookingConcessions     BookingConcession[]
+  stockRequestLines      StockRequestLine[]
+  stockReceiptLines      StockReceiptLine[]
+  stockTransferLines     StockTransferLine[]
+  purchaseOrderLines     PurchaseOrderLine[]
+  ticketPackageItemLines TicketPackageItemLine[]
+  posConcessionSaleLines PosConcessionSaleLine[]
 
   @@index([branchId])
+}
+
+// A POS sale with no ticket — walk-in concessions only. Kept separate from Booking
+// (which always represents a specific showtime + seats) rather than making
+// Booking.showtimeId nullable, which would touch seat-availability logic used
+// throughout the public booking flow.
+model PosConcessionSale {
+  id             String   @id @default(cuid())
+  branchId       String
+  cashierId      String
+  staffSessionId String?
+  paymentMethod  String
+  totalAmount    Float
+  createdAt      DateTime @default(now())
+
+  branch       Branch        @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  cashier      User          @relation(fields: [cashierId], references: [id])
+  staffSession StaffSession? @relation(fields: [staffSessionId], references: [id])
+  lines        PosConcessionSaleLine[]
+
+  @@index([branchId])
+  @@index([cashierId])
+}
+
+model PosConcessionSaleLine {
+  id             String @id @default(cuid())
+  saleId         String
+  posItemId      String
+  quantity       Int
+  priceAtBooking Float
+
+  sale    PosConcessionSale @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  posItem PosItem           @relation(fields: [posItemId], references: [id])
+
+  @@index([saleId])
 }
 
 model RosterShift {
@@ -525,6 +672,7 @@ model StaffSession {
   staff    User  @relation("StaffSessionStaff", fields: [staffId], references: [id], onDelete: Cascade)
   branch   Branch @relation(fields: [branchId], references: [id], onDelete: Cascade)
   closedBy User? @relation("StaffSessionClosedBy", fields: [closedById], references: [id])
+  posConcessionSales PosConcessionSale[]
 
   @@index([branchId])
   @@index([staffId])

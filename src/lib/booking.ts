@@ -19,7 +19,7 @@ export async function getShowtimeWithSeatMap(showtimeId: string, sessionId?: str
       auditorium: { include: { branch: true, seats: true } },
     },
   });
-  if (!showtime) return null;
+  if (!showtime || showtime.status === "CLOSED") return null;
 
   const now = new Date();
 

@@ -4,6 +4,7 @@ import { useActionState } from "react";
 import { createPosItemAction, updatePosItemAction, type FormState } from "@/actions/admin/pos-items";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Select, Textarea, FieldError } from "@/components/ui/input";
+import { MovieImageUploader } from "@/components/admin/movie-image-uploader";
 import type { PosItem } from "@prisma/client";
 
 export function PosItemForm({
@@ -36,6 +37,8 @@ export function PosItemForm({
           </Select>
         </div>
       )}
+
+      <MovieImageUploader id="image" name="image" label="Item Photo" currentUrl={item?.imageUrl} shape="square" />
 
       <div>
         <Label htmlFor="name">Name</Label>

@@ -20,7 +20,7 @@ export default async function CheckoutPage({ params }: { params: Promise<{ showt
     }),
   ]);
 
-  if (!showtime || activeLocks.length === 0) {
+  if (!showtime || showtime.status === "CLOSED" || activeLocks.length === 0) {
     redirect(`/booking/${showtimeId}/seats`);
   }
 

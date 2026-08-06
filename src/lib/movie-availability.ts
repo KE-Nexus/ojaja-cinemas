@@ -15,6 +15,7 @@ export function nowShowingWhere(locationId: string | null): Prisma.MovieWhereInp
           showtimes: {
             some: {
               startTime: { gte: new Date() },
+              status: "OPEN",
               auditorium: { branchId: locationId },
             },
           },

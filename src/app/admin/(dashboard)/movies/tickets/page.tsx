@@ -44,7 +44,7 @@ export default async function TicketClassesPage({
           <p className="text-sm text-muted">{tickets.length} ticket class{tickets.length === 1 ? "" : "es"}</p>
         </div>
         <Button href="/admin/movies/tickets/new">
-          <Plus size={16} /> Add Ticket Class
+          <Plus size={16} /> Create
         </Button>
       </div>
 
@@ -83,7 +83,7 @@ export default async function TicketClassesPage({
                 <tr key={t.id} className="border-b border-border/50">
                   <td className="p-3 text-muted">{i + 1}</td>
                   <td className="p-3">{t.description}</td>
-                  <td className="p-3 font-medium">{t.className}</td>
+                  <td className="p-3 font-medium">{t.kind === "PACKAGE" ? "Package" : t.kind === "VOUCHER" ? "Voucher" : "Standard"}</td>
                   <td className="p-3 text-muted">{t.type}</td>
                   <td className="p-3 text-muted">{formatNaira(t.defaultPrice)}</td>
                   <td className="p-3">
@@ -94,7 +94,7 @@ export default async function TicketClassesPage({
                       <Link href={`/admin/movies/tickets/${t.id}/edit`} className="text-muted hover:text-brand-light">
                         <Pencil size={15} />
                       </Link>
-                      <DeleteButton action={deleteTicketClassAction.bind(null, t.id)} confirmText={`Delete "${t.className}" (${t.branch.name})?`} />
+                      <DeleteButton action={deleteTicketClassAction.bind(null, t.id)} confirmText={`Delete "${t.description}" (${t.branch.name})?`} />
                     </div>
                   </td>
                 </tr>

@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { Plus, Pencil, X } from "lucide-react";
+import Image from "next/image";
+import { Plus, Pencil, X, ImageOff } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { Button } from "@/components/ui/button";
 import { formatNaira } from "@/lib/format";
@@ -63,6 +64,7 @@ export default async function AllItemsPage({
             <thead>
               <tr className="border-b border-border text-left text-muted">
                 <th className="p-3 font-medium">S/N</th>
+                <th className="p-3 font-medium">Photo</th>
                 <th className="p-3 font-medium">Name</th>
                 <th className="p-3 font-medium">Item Class</th>
                 <th className="p-3 font-medium">Item Group</th>
@@ -75,6 +77,17 @@ export default async function AllItemsPage({
               {items.map((it, i) => (
                 <tr key={it.id} className="border-b border-border/50">
                   <td className="p-3 text-muted">{i + 1}</td>
+                  <td className="p-3">
+                    <div className="relative h-10 w-10 overflow-hidden rounded-lg bg-surface-2">
+                      {it.imageUrl ? (
+                        <Image src={it.imageUrl} alt={it.name} fill unoptimized className="object-cover" />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center text-muted">
+                          <ImageOff size={14} />
+                        </div>
+                      )}
+                    </div>
+                  </td>
                   <td className="p-3 font-medium">{it.name}</td>
                   <td className="p-3 text-muted">{it.itemClass}</td>
                   <td className="p-3 text-muted">{it.itemGroup}</td>

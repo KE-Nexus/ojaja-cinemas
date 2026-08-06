@@ -39,6 +39,7 @@ export default async function ShowtimesPage({
     prisma.showtime.findMany({
       where: {
         startTime: { gte: dayStart, lt: dayEnd },
+        status: "OPEN",
         ...(effectiveBranch ? { auditorium: { branchId: effectiveBranch } } : {}),
         ...(movie ? { movie: { slug: movie } } : {}),
       },
@@ -115,7 +116,7 @@ export default async function ShowtimesPage({
             return (
               <div key={movieId} className="overflow-hidden rounded-xl bg-surface">
                 <div className="relative h-56 sm:h-72">
-                  <Image src={m.backdropUrl ?? m.posterUrl} alt="" fill className="object-cover" />
+                  <Image src={m.backdropUrl ?? m.posterUrl} alt="" fill unoptimized className="object-cover" />
                   <div className="absolute inset-0 bg-gradient-to-t from-surface via-surface/40 to-transparent" />
                   <div className="absolute inset-0 bg-gradient-to-r from-surface/90 via-surface/10 to-transparent" />
 

@@ -3,7 +3,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { SchedulingDayView, type ScheduleRoom } from "@/components/admin/scheduling-day-view";
 import { SchedulingToolbar } from "@/components/admin/scheduling-toolbar";
-import { CreateSessionModal } from "@/components/admin/create-session-modal";
+import { CreateFilmSessionsModal } from "@/components/admin/create-film-sessions-modal";
 import { BranchSelectForm } from "@/components/admin/branch-select-form";
 import { getBranchScope, resolveScopedBranchId } from "@/lib/branch-scope";
 
@@ -14,7 +14,13 @@ function dayStart(dateStr?: string) {
 }
 
 function toDateInputValue(d: Date) {
-  return d.toISOString().slice(0, 10);
+  // Deliberately local-calendar-date, not d.toISOString().slice(0, 10) — that reads the
+  // date back in UTC, which silently shifts it a day in timezones ahead of UTC (e.g. WAT)
+  // and made the "next day" link compute the same date param as the one already loaded.
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 export default async function SchedulingPage({
@@ -37,11 +43,14 @@ export default async function SchedulingPage({
   const prevDay = new Date(today.getTime() - 24 * 60 * 60 * 1000);
   const nextDay = tomorrow;
 
-  const [auditoriums, movies] = await Promise.all([
+  const [auditoriums, movies, priceCards] = await Promise.all([
     selectedBranch
       ? prisma.auditorium.findMany({ where: { branchId: selectedBranch.id }, orderBy: { name: "asc" } })
       : Promise.resolve([]),
     prisma.movie.findMany({ where: { status: { not: "ARCHIVED" } }, orderBy: { title: "asc" } }),
+    selectedBranch
+      ? prisma.priceCard.findMany({ where: { branchId: selectedBranch.id, isActive: true }, orderBy: { name: "asc" } })
+      : Promise.resolve([]),
   ]);
 
   const showtimes = selectedBranch
@@ -97,9 +106,12 @@ export default async function SchedulingPage({
       </div>
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
-        <CreateSessionModal
+        <CreateFilmSessionsModal
           movies={movies.map((m) => ({ id: m.id, title: m.title }))}
           rooms={auditoriums.map((a) => ({ id: a.id, name: a.name }))}
+          priceCards={priceCards.map((p) => ({ id: p.id, name: p.name }))}
+          branches={branches.map((b) => ({ id: b.id, name: b.name }))}
+          defaultBranchId={selectedBranch?.id}
           defaultDate={`${dateParam}T12:00`}
         />
         <SchedulingToolbar
@@ -107,6 +119,9 @@ export default async function SchedulingPage({
           auditoriumIds={auditoriums.map((a) => a.id)}
           dayStartISO={today.toISOString()}
           dayEndISO={tomorrow.toISOString()}
+          branches={branches.map((b) => ({ id: b.id, name: b.name }))}
+          currentBranchId={selectedBranch?.id}
+          isCircuitAdmin={scope.isCircuitAdmin}
         />
       </div>
 

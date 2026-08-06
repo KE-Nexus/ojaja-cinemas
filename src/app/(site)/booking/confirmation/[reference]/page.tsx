@@ -38,7 +38,7 @@ export default async function ConfirmationPage({ params }: { params: Promise<{ r
       <Reveal>
         <div id="e-ticket" className="glow-brand relative overflow-hidden rounded-2xl border border-white/10 bg-surface">
           <div className="relative h-40 w-full">
-            <Image src={booking.showtime.movie.backdropUrl ?? booking.showtime.movie.posterUrl} alt="" fill className="object-cover opacity-40" />
+            <Image src={booking.showtime.movie.backdropUrl ?? booking.showtime.movie.posterUrl} alt="" fill unoptimized className="object-cover opacity-40" />
             <div className="absolute inset-0 bg-gradient-to-t from-surface via-surface/60 to-transparent" />
             <div className="absolute bottom-3 left-5">
               <Badge tone="brand">{booking.reference}</Badge>

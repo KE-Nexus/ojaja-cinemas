@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { MapPin, Phone, Clock } from "lucide-react";
 
@@ -14,7 +15,11 @@ export default async function LocationsPage() {
 
       <div className="mt-10 grid gap-6 sm:grid-cols-2">
         {branches.map((b) => (
-          <div key={b.id} className="rounded-2xl border border-border bg-surface p-6">
+          <Link
+            key={b.id}
+            href={`/locations/${b.slug}`}
+            className="rounded-2xl border border-border bg-surface p-6 transition-colors hover:border-brand/40"
+          >
             <h2 className="font-sans text-xl font-bold tracking-tight">{b.name}</h2>
             <div className="mt-3 space-y-2 text-sm text-muted">
               <p className="flex items-start gap-2">
@@ -30,7 +35,7 @@ export default async function LocationsPage() {
             <p className="mt-3 text-xs text-muted">
               {b.auditoriums.length} screens · {b.auditoriums.map((a) => a.screenType).join(", ")}
             </p>
-          </div>
+          </Link>
         ))}
       </div>
     </div>

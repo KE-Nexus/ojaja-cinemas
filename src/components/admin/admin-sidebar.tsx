@@ -34,6 +34,9 @@ import {
   ShoppingCart,
   Gift,
   Sparkles,
+  Settings,
+  CreditCard,
+  Boxes,
 } from "lucide-react";
 import { logoutAction } from "@/actions/auth";
 import type { Role } from "@prisma/client";
@@ -63,6 +66,13 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
       { href: "/admin/movies", label: "Movies", icon: Film, roles: null },
       { href: "/admin/movies/contracts", label: "Film Contracts", icon: FileSignature, roles: ["SUPERVISOR", "CIRCUIT_ADMIN"] },
       { href: "/admin/movies/tickets", label: "Tickets", icon: TicketCheck, roles: ["SUPERVISOR", "CIRCUIT_ADMIN"], claim: "CAN_VIEW_PRICECARDS" },
+      {
+        href: "/admin/movies/price-cards",
+        label: "Price Cards",
+        icon: CreditCard,
+        roles: ["SUPERVISOR", "CIRCUIT_ADMIN"],
+        claim: "CAN_VIEW_PRICECARDS",
+      },
       { href: "/admin/showtimes", label: "Showtimes", icon: CalendarClock, roles: null, claim: "CAN_VIEW_SHOWTIMES" },
       { href: "/admin/scheduling", label: "Film Scheduling", icon: CalendarRange, roles: ["SUPERVISOR", "CIRCUIT_ADMIN"] },
       { href: "/admin/locations", label: "Locations", icon: MapPin, roles: ["SUPERVISOR", "CIRCUIT_ADMIN"] },
@@ -87,6 +97,7 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
   {
     label: "POS",
     items: [
+      { href: "/admin/pos/stock-overview", label: "Stock Overview", icon: Boxes, roles: ["SUPERVISOR", "CIRCUIT_ADMIN"] },
       { href: "/admin/pos/ho-items", label: "HO Items", icon: Warehouse, roles: ["SUPERVISOR", "CIRCUIT_ADMIN"] },
       { href: "/admin/pos/items", label: "All Items", icon: Package, roles: ["SUPERVISOR", "CIRCUIT_ADMIN"] },
       { href: "/admin/pos/stock-requests", label: "Stock Requests", icon: ClipboardList, roles: null, claim: "CAN_CREATE_APPROVE_STOCK_REQUEST" },
@@ -131,6 +142,10 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
       { href: "/admin/users", label: "Users & Roles", icon: Users, roles: ["CIRCUIT_ADMIN"] },
       { href: "/admin/audit-log", label: "Audit Log", icon: ScrollText, roles: ["SUPERVISOR", "CIRCUIT_ADMIN", "AUDITOR"] },
     ],
+  },
+  {
+    label: "Settings",
+    items: [{ href: "/admin/settings/hive", label: "Hive Settings", icon: Settings, roles: ["SUPERVISOR", "CIRCUIT_ADMIN"] }],
   },
 ];
 

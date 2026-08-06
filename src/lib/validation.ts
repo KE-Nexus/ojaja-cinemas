@@ -44,9 +44,6 @@ export const lockSeatsSchema = z.object({
 export const movieSchema = z.object({
   title: z.string().min(1, "Title is required").max(150),
   synopsis: z.string().min(10, "Synopsis is too short").max(2000),
-  posterUrl: z.string().url("Enter a valid URL"),
-  backdropUrl: z.string().url("Enter a valid URL").optional().or(z.literal("")),
-  trailerUrl: z.string().url("Enter a valid URL").optional().or(z.literal("")),
   genres: z.string().min(1, "Enter at least one genre").max(150),
   classification: z.string().min(1).max(10),
   language: z.string().min(1).max(60),
@@ -67,6 +64,23 @@ export const showtimeSchema = z.object({
   format: z.string().min(1).max(20),
 });
 
+export const filmSessionBatchSchema = z.object({
+  branchId: z.string().min(1, "Select a cinema"),
+  movieId: z.string().min(1, "Select a film"),
+  status: z.enum(["OPEN", "CLOSED"]),
+  language: z.string().min(1, "Select a language"),
+});
+
+export const filmSessionRowSchema = z.object({
+  auditoriumId: z.string().min(1, "Select a screen"),
+  priceCardId: z.string().optional().or(z.literal("")),
+  format: z.string().min(1, "Select a screen format").max(30),
+  trailerDurationMins: z.coerce.number().int().min(0, "Enter a valid duration").default(0),
+  startTime: z.string().min(1, "Select a start time"),
+  endTime: z.string().optional().or(z.literal("")),
+  cleanupTimeMins: z.coerce.number().int().min(0, "Enter a valid duration").default(0),
+});
+
 export const branchSchema = z.object({
   name: z.string().min(2, "Name is required").max(80),
   city: z.string().min(2, "City is required").max(80),
@@ -75,6 +89,18 @@ export const branchSchema = z.object({
   openingHours: z.string().min(3, "Opening hours are required").max(120),
   lat: z.coerce.number().min(-90).max(90).optional().or(z.literal("")),
   lng: z.coerce.number().min(-180).max(180).optional().or(z.literal("")),
+});
+
+export const hiveSettingsSchema = z.object({
+  branchId: z.string().min(1),
+  aboutUs: z.string().max(2000).optional().or(z.literal("")),
+  useFilmSchedule: z.coerce.boolean().optional(),
+});
+
+export const branchContactSchema = z.object({
+  address: z.string().min(5, "Address is required").max(200),
+  phone: z.string().min(7, "Enter a valid phone number").max(30),
+  email: z.string().email("Enter a valid email").optional().or(z.literal("")),
 });
 
 export const branchBankSchema = z.object({
@@ -108,10 +134,36 @@ export const filmContractSchema = z.object({
 
 export const ticketClassSchema = z.object({
   branchId: z.string().min(1, "Select a cinema"),
-  description: z.string().min(2, "Description is required").max(200),
-  className: z.string().min(1, "Ticket class is required").max(60),
-  type: z.string().min(1, "Type is required").max(60),
+  description: z.string().min(2, "Ticket type name is required").max(200),
+  type: z.string().min(1, "Short name is required").max(60),
+  kind: z.enum(["STANDARD", "PACKAGE", "VOUCHER"]),
+  seatClass: z.enum(["STANDARD", "PREMIUM", "RECLINER", "ACCESSIBLE"]).optional().or(z.literal("")),
   defaultPrice: z.coerce.number().min(0, "Enter a valid price"),
+  salesTaxPercent: z.coerce.number().min(0, "Enter a valid tax rate").max(100, "Enter a valid tax rate"),
+  isActive: z.coerce.boolean(),
+  isLoyaltyTicket: z.coerce.boolean().optional(),
+  isComplementary: z.coerce.boolean().optional(),
+  salesSources: z.array(z.string()).min(1, "Select at least one Sales Source"),
+});
+
+export const ticketPackageLineSchema = z.object({
+  ticketClassId: z.string().min(1),
+  quantity: z.coerce.number().int().min(1, "Quantity must be at least 1"),
+});
+
+export const ticketPackageItemLineSchema = z.object({
+  posItemId: z.string().min(1),
+  quantity: z.coerce.number().int().min(1, "Quantity must be at least 1"),
+});
+
+export const WEEK_DAYS = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"] as const;
+
+export const priceCardSchema = z.object({
+  branchId: z.string().min(1, "Select a cinema"),
+  name: z.string().min(2, "Name is required").max(100),
+  description: z.string().max(500).optional().or(z.literal("")),
+  days: z.array(z.enum(WEEK_DAYS)).min(1, "Select at least one day"),
+  isActive: z.coerce.boolean(),
 });
 
 export const posItemSchema = z.object({

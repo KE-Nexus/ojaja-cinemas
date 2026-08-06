@@ -1,0 +1,576 @@
+"use client";
+
+import { useEffect, useMemo, useState, useTransition } from "react";
+import Image from "next/image";
+import { toast } from "sonner";
+import { AnimatePresence, motion } from "framer-motion";
+import { Ticket, Trash2, Plus, Minus, CreditCard, Banknote, LogOut, Film, PauseCircle, PlayCircle, Search } from "lucide-react";
+import { posCheckoutAction } from "@/actions/pos/checkout";
+import { openCashDrawerAction } from "@/actions/pos/tools";
+import { logoutAction } from "@/actions/auth";
+import { formatNaira } from "@/lib/format";
+import { cn } from "@/lib/cn";
+import { PosModalShell } from "@/components/pos/pos-modal-shell";
+import { OthersMenu } from "@/components/pos/others-menu";
+import { FindItemModal } from "@/components/pos/find-item-modal";
+import { FindBookingModal } from "@/components/pos/find-booking-modal";
+import { UserSalesModal } from "@/components/pos/user-sales-modal";
+import { OrdersModal } from "@/components/pos/orders-modal";
+import { CloseSessionModal } from "@/components/pos/close-session-modal";
+import { SwapTicketModal } from "@/components/pos/swap-ticket-modal";
+import type { SeatCategory, TicketClassKind } from "@prisma/client";
+
+type ShowtimeOption = {
+  id: string;
+  movieTitle: string;
+  posterUrl: string;
+  auditoriumName: string;
+  format: string;
+  startTime: string;
+};
+
+type TicketClassOption = {
+  id: string;
+  label: string;
+  price: number;
+  kind: TicketClassKind;
+  seatClass: SeatCategory | null;
+  packageContents: { tickets: { label: string; quantity: number }[]; items: { name: string; quantity: number }[] } | null;
+};
+
+type ItemOption = { id: string; name: string; price: number; group: string; imageUrl: string | null };
+
+type TicketCartLine = { ticketClassId: string; label: string; price: number; quantity: number };
+type ItemCartLine = { posItemId: string; name: string; price: number; quantity: number };
+
+type HeldOrder = {
+  id: string;
+  heldAt: Date;
+  selectedShowtimeId: string | null;
+  showtimeLabel: string;
+  ticketLines: Record<string, TicketCartLine>;
+  itemLines: Record<string, ItemCartLine>;
+};
+
+export function PosTerminal({
+  staffName,
+  branchName,
+  showtimes,
+  ticketClasses,
+  items,
+  canCloseSessionSelf,
+}: {
+  staffName: string;
+  branchName: string;
+  showtimes: ShowtimeOption[];
+  ticketClasses: TicketClassOption[];
+  items: ItemOption[];
+  canCloseSessionSelf: boolean;
+}) {
+  const groups = useMemo(() => Array.from(new Set(items.map((i) => i.group))).sort(), [items]);
+  const [activeTab, setActiveTab] = useState<string>("tickets");
+  const [selectedShowtimeId, setSelectedShowtimeId] = useState<string | null>(null);
+  const [ticketLines, setTicketLines] = useState<Record<string, TicketCartLine>>({});
+  const [itemLines, setItemLines] = useState<Record<string, ItemCartLine>>({});
+  const [heldOrders, setHeldOrders] = useState<HeldOrder[]>([]);
+  const [showHeldOrders, setShowHeldOrders] = useState(false);
+  const [activeModal, setActiveModal] = useState<"findItem" | "findBooking" | "userSales" | "orders" | "closeSession" | "swapTicket" | null>(null);
+  const [now, setNow] = useState(() => new Date());
+  const [isPending, startTransition] = useTransition();
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const selectedShowtime = showtimes.find((s) => s.id === selectedShowtimeId) ?? null;
+
+  function pickShowtime(id: string) {
+    if (id !== selectedShowtimeId && Object.keys(ticketLines).length > 0) {
+      if (!confirm("Switching showtimes will clear the tickets already in this order. Continue?")) return;
+      setTicketLines({});
+    }
+    setSelectedShowtimeId(id);
+  }
+
+  function addTicket(tc: TicketClassOption) {
+    if (!selectedShowtimeId) {
+      toast.error("Pick a showtime first.");
+      return;
+    }
+    setTicketLines((prev) => {
+      const existing = prev[tc.id];
+      return { ...prev, [tc.id]: { ticketClassId: tc.id, label: tc.label, price: tc.price, quantity: (existing?.quantity ?? 0) + 1 } };
+    });
+  }
+
+  function adjustTicket(id: string, delta: number) {
+    setTicketLines((prev) => {
+      const line = prev[id];
+      if (!line) return prev;
+      const quantity = line.quantity + delta;
+      if (quantity <= 0) {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      }
+      return { ...prev, [id]: { ...line, quantity } };
+    });
+  }
+
+  function addItem(it: ItemOption) {
+    setItemLines((prev) => {
+      const existing = prev[it.id];
+      return { ...prev, [it.id]: { posItemId: it.id, name: it.name, price: it.price, quantity: (existing?.quantity ?? 0) + 1 } };
+    });
+  }
+
+  function adjustItem(id: string, delta: number) {
+    setItemLines((prev) => {
+      const line = prev[id];
+      if (!line) return prev;
+      const quantity = line.quantity + delta;
+      if (quantity <= 0) {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      }
+      return { ...prev, [id]: { ...line, quantity } };
+    });
+  }
+
+  function clearCart() {
+    setTicketLines({});
+    setItemLines({});
+    setSelectedShowtimeId(null);
+  }
+
+  function holdOrder() {
+    if (cartEmpty) return;
+    const held: HeldOrder = {
+      id: crypto.randomUUID(),
+      heldAt: new Date(),
+      selectedShowtimeId,
+      showtimeLabel: selectedShowtime?.movieTitle ?? "Concessions only",
+      ticketLines,
+      itemLines,
+    };
+    setHeldOrders((prev) => [held, ...prev]);
+    clearCart();
+    toast.success("Order held.");
+  }
+
+  function recallOrder(id: string) {
+    const held = heldOrders.find((h) => h.id === id);
+    if (!held) return;
+    if (!cartEmpty) {
+      const parked: HeldOrder = {
+        id: crypto.randomUUID(),
+        heldAt: new Date(),
+        selectedShowtimeId,
+        showtimeLabel: selectedShowtime?.movieTitle ?? "Concessions only",
+        ticketLines,
+        itemLines,
+      };
+      setHeldOrders((prev) => [parked, ...prev.filter((h) => h.id !== id)]);
+    } else {
+      setHeldOrders((prev) => prev.filter((h) => h.id !== id));
+    }
+    setTicketLines(held.ticketLines);
+    setItemLines(held.itemLines);
+    setSelectedShowtimeId(held.selectedShowtimeId);
+    setShowHeldOrders(false);
+  }
+
+  function deleteHeldOrder(id: string) {
+    setHeldOrders((prev) => prev.filter((h) => h.id !== id));
+  }
+
+  function handleOthersSelect(action: "findBooking" | "userSales" | "openCashDrawer" | "orders" | "closeSession" | "swapTicket") {
+    if (action === "openCashDrawer") {
+      startTransition(async () => {
+        const result = await openCashDrawerAction();
+        if (result.error) toast.error(result.error);
+        else toast.success("Cash drawer opened.");
+      });
+      return;
+    }
+    setActiveModal(action);
+  }
+
+  const ticketTotal = Object.values(ticketLines).reduce((s, l) => s + l.price * l.quantity, 0);
+  const itemTotal = Object.values(itemLines).reduce((s, l) => s + l.price * l.quantity, 0);
+  const total = ticketTotal + itemTotal;
+  const cartEmpty = Object.keys(ticketLines).length === 0 && Object.keys(itemLines).length === 0;
+
+  function checkout(method: "CASH" | "CARD") {
+    if (cartEmpty) {
+      toast.error("Add at least one ticket or item to this order.");
+      return;
+    }
+    startTransition(async () => {
+      const result = await posCheckoutAction(
+        {
+          showtimeId: selectedShowtimeId,
+          ticketLines: Object.values(ticketLines).map((l) => ({ ticketClassId: l.ticketClassId, quantity: l.quantity })),
+          itemLines: Object.values(itemLines).map((l) => ({ posItemId: l.posItemId, quantity: l.quantity })),
+        },
+        method
+      );
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success(`Sale complete — ${result.reference} · ${formatNaira(result.total ?? 0)}`);
+      clearCart();
+    });
+  }
+
+  return (
+    <div className="flex h-screen flex-col">
+      {/* Top bar */}
+      <div className="flex items-center gap-2 overflow-x-auto border-b border-white/10 bg-gradient-to-r from-brand/20 via-black to-accent-cyan/10 px-4 py-3">
+        <TabPill active={activeTab === "tickets"} onClick={() => setActiveTab("tickets")} icon={<Ticket size={14} />}>
+          Tickets
+        </TabPill>
+        {groups.map((g) => (
+          <TabPill key={g} active={activeTab === g} onClick={() => setActiveTab(g)}>
+            {g}
+          </TabPill>
+        ))}
+        <div className="ml-auto flex shrink-0 items-center gap-2">
+          <button
+            onClick={() => setActiveModal("findItem")}
+            className="flex items-center gap-1.5 rounded-full border border-white/10 px-3.5 py-1.5 text-sm font-medium text-muted transition-all hover:border-white/30 hover:text-white"
+          >
+            <Search size={14} /> Find Item
+          </button>
+          <button
+            onClick={() => setShowHeldOrders(true)}
+            className="relative flex items-center gap-1.5 rounded-full border border-white/10 px-3.5 py-1.5 text-sm font-medium text-muted transition-all hover:border-white/30 hover:text-white"
+          >
+            <PauseCircle size={14} /> Held
+            {heldOrders.length > 0 && (
+              <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-brand px-1 text-[10px] font-bold text-white">
+                {heldOrders.length}
+              </span>
+            )}
+          </button>
+          <OthersMenu onSelect={handleOthersSelect} />
+        </div>
+      </div>
+
+      <div className="flex flex-1 overflow-hidden">
+        {/* Main grid */}
+        <main className="flex-1 overflow-y-auto p-4">
+          <AnimatePresence mode="wait">
+            {activeTab === "tickets" ? (
+              <motion.div key="tickets" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}>
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Today&rsquo;s Showtimes</p>
+                {showtimes.length === 0 ? (
+                  <p className="rounded-xl border border-dashed border-white/10 p-6 text-center text-sm text-muted">No sessions scheduled today.</p>
+                ) : (
+                  <div className="mb-6 flex gap-3 overflow-x-auto pb-2">
+                    {showtimes.map((st) => (
+                      <button
+                        key={st.id}
+                        onClick={() => pickShowtime(st.id)}
+                        className={cn(
+                          "glow-card flex w-44 shrink-0 flex-col overflow-hidden rounded-xl border text-left transition-all",
+                          selectedShowtimeId === st.id ? "border-brand-light shadow-[0_0_0_2px_rgba(194,44,201,0.4)]" : "border-white/10 hover:border-brand/40"
+                        )}
+                      >
+                        <div className="relative h-24 w-full bg-white/5">
+                          <Image src={st.posterUrl} alt={st.movieTitle} fill unoptimized className="object-cover" />
+                        </div>
+                        <div className="p-2.5">
+                          <p className="line-clamp-1 text-sm font-semibold">{st.movieTitle}</p>
+                          <p className="text-xs text-muted">
+                            {new Date(st.startTime).toLocaleTimeString("en-NG", { hour: "2-digit", minute: "2-digit" })} · {st.auditoriumName} · {st.format}
+                          </p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {selectedShowtime && (
+                  <>
+                    <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted">
+                      <Film size={12} /> Ticket Types for {selectedShowtime.movieTitle}
+                    </p>
+                    {ticketClasses.length === 0 ? (
+                      <p className="rounded-xl border border-dashed border-white/10 p-6 text-center text-sm text-muted">No ticket types configured.</p>
+                    ) : (
+                      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                        {ticketClasses.map((tc) => (
+                          <GridTile key={tc.id} label={tc.label} price={tc.price} onClick={() => addTicket(tc)} />
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+              </motion.div>
+            ) : (
+              <motion.div key={activeTab} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}>
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">{activeTab}</p>
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                  {items
+                    .filter((it) => it.group === activeTab)
+                    .map((it) => (
+                      <GridTile key={it.id} label={it.name} price={it.price} imageUrl={it.imageUrl} onClick={() => addItem(it)} />
+                    ))}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </main>
+
+        {/* Cart sidebar */}
+        <aside className="flex w-80 shrink-0 flex-col border-l border-white/10 bg-white/[0.02]">
+          <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+            <p className="text-sm font-semibold">Current Order</p>
+            {!cartEmpty && (
+              <div className="flex items-center gap-3">
+                <button onClick={holdOrder} className="flex items-center gap-1 text-xs text-muted hover:text-white">
+                  <PauseCircle size={12} /> Hold
+                </button>
+                <button onClick={clearCart} className="flex items-center gap-1 text-xs text-danger hover:underline">
+                  <Trash2 size={12} /> Clear
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div className="flex-1 overflow-y-auto px-4 py-3">
+            {cartEmpty ? (
+              <p className="mt-10 text-center text-sm text-muted">No items yet</p>
+            ) : (
+              <div className="space-y-3">
+                {Object.values(ticketLines).length > 0 && selectedShowtime && (
+                  <div>
+                    <p className="mb-1.5 line-clamp-1 text-xs font-semibold text-brand-light">{selectedShowtime.movieTitle}</p>
+                    {Object.values(ticketLines).map((l) => {
+                      const tc = ticketClasses.find((t) => t.id === l.ticketClassId);
+                      return (
+                        <CartRow
+                          key={l.ticketClassId}
+                          label={l.label}
+                          price={l.price}
+                          quantity={l.quantity}
+                          onInc={() => adjustTicket(l.ticketClassId, 1)}
+                          onDec={() => adjustTicket(l.ticketClassId, -1)}
+                          badge={tc?.kind === "PACKAGE" ? "Bundle" : undefined}
+                          subContent={
+                            tc?.packageContents
+                              ? [
+                                  ...tc.packageContents.tickets.map((t) => `${t.quantity * l.quantity}× ${t.label}`),
+                                  ...tc.packageContents.items.map((it) => `${it.quantity * l.quantity}× ${it.name}`),
+                                ].join(" · ")
+                              : undefined
+                          }
+                        />
+                      );
+                    })}
+                  </div>
+                )}
+                {Object.values(itemLines).length > 0 && (
+                  <div>
+                    {Object.values(ticketLines).length > 0 && <div className="my-2 border-t border-white/10" />}
+                    {Object.values(itemLines).map((l) => (
+                      <CartRow
+                        key={l.posItemId}
+                        label={l.name}
+                        price={l.price}
+                        quantity={l.quantity}
+                        onInc={() => adjustItem(l.posItemId, 1)}
+                        onDec={() => adjustItem(l.posItemId, -1)}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="border-t border-white/10 px-4 py-3">
+            <div className="mb-3 flex items-center justify-between text-sm">
+              <span className="text-muted">Order Total</span>
+              <span className="text-lg font-bold text-white">{formatNaira(total)}</span>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                disabled={cartEmpty || isPending}
+                onClick={() => checkout("CASH")}
+                className="flex items-center justify-center gap-1.5 rounded-xl bg-success py-3 text-sm font-semibold text-black transition-transform active:scale-95 disabled:opacity-30"
+              >
+                <Banknote size={16} /> Cash
+              </button>
+              <button
+                disabled={cartEmpty || isPending}
+                onClick={() => checkout("CARD")}
+                className="flex items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-brand to-accent-cyan py-3 text-sm font-semibold text-white transition-transform active:scale-95 disabled:opacity-30"
+              >
+                <CreditCard size={16} /> Card
+              </button>
+            </div>
+          </div>
+        </aside>
+      </div>
+
+      {/* Bottom status bar */}
+      <div className="flex items-center justify-between border-t border-white/10 bg-black px-4 py-2 text-xs text-muted">
+        <span>{now.toLocaleString("en-NG", { weekday: "short", day: "2-digit", month: "short", year: "numeric" })}</span>
+        <span>{now.toLocaleTimeString("en-NG")}</span>
+        <span>
+          {staffName} · {branchName}
+        </span>
+        <form action={logoutAction}>
+          <button type="submit" className="flex items-center gap-1 hover:text-foreground">
+            <LogOut size={12} /> Log Off
+          </button>
+        </form>
+      </div>
+
+      {showHeldOrders && (
+        <PosModalShell title="Held Orders" onClose={() => setShowHeldOrders(false)}>
+          {heldOrders.length === 0 ? (
+            <p className="py-8 text-center text-sm text-muted">No orders on hold.</p>
+          ) : (
+            <div className="space-y-2">
+              {heldOrders.map((h) => {
+                const ticketCount = Object.values(h.ticketLines).reduce((s, l) => s + l.quantity, 0);
+                const itemCount = Object.values(h.itemLines).reduce((s, l) => s + l.quantity, 0);
+                const heldTotal =
+                  Object.values(h.ticketLines).reduce((s, l) => s + l.price * l.quantity, 0) +
+                  Object.values(h.itemLines).reduce((s, l) => s + l.price * l.quantity, 0);
+                return (
+                  <div key={h.id} className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.03] p-3">
+                    <div className="min-w-0">
+                      <p className="line-clamp-1 text-sm font-semibold">{h.showtimeLabel}</p>
+                      <p className="text-xs text-muted">
+                        {ticketCount > 0 ? `${ticketCount} ticket${ticketCount === 1 ? "" : "s"}` : ""}
+                        {ticketCount > 0 && itemCount > 0 ? " · " : ""}
+                        {itemCount > 0 ? `${itemCount} item${itemCount === 1 ? "" : "s"}` : ""}
+                        {" · "}
+                        {formatNaira(heldTotal)} · {h.heldAt.toLocaleTimeString("en-NG", { hour: "2-digit", minute: "2-digit" })}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <button
+                        onClick={() => recallOrder(h.id)}
+                        className="flex items-center gap-1 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-light"
+                      >
+                        <PlayCircle size={13} /> Recall
+                      </button>
+                      <button onClick={() => deleteHeldOrder(h.id)} className="rounded-lg p-1.5 text-danger hover:bg-white/10" aria-label="Discard">
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </PosModalShell>
+      )}
+
+      {activeModal === "findItem" && (
+        <FindItemModal items={items} onAdd={(it) => addItem(it)} onClose={() => setActiveModal(null)} />
+      )}
+      {activeModal === "findBooking" && <FindBookingModal onClose={() => setActiveModal(null)} />}
+      {activeModal === "userSales" && <UserSalesModal onClose={() => setActiveModal(null)} />}
+      {activeModal === "orders" && <OrdersModal onClose={() => setActiveModal(null)} />}
+      {activeModal === "closeSession" && (
+        <CloseSessionModal canCloseSelf={canCloseSessionSelf} onClose={() => setActiveModal(null)} />
+      )}
+      {activeModal === "swapTicket" && <SwapTicketModal onClose={() => setActiveModal(null)} />}
+    </div>
+  );
+}
+
+function TabPill({ active, onClick, icon, children }: { active: boolean; onClick: () => void; icon?: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        "flex shrink-0 items-center gap-1.5 rounded-full border px-4 py-1.5 text-sm font-medium transition-all",
+        active ? "border-brand-light bg-brand text-white shadow-[0_0_16px_-2px_rgba(194,44,201,0.7)]" : "border-white/10 text-muted hover:border-white/30 hover:text-white"
+      )}
+    >
+      {icon}
+      {children}
+    </button>
+  );
+}
+
+function GridTile({
+  label,
+  price,
+  imageUrl,
+  onClick,
+}: {
+  label: string;
+  price: number;
+  imageUrl?: string | null;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="glow-card flex flex-col overflow-hidden rounded-xl border border-white/10 bg-white/[0.03] text-left transition-all hover:-translate-y-0.5 hover:border-brand-light/60 hover:bg-white/[0.06] active:scale-[0.97]"
+    >
+      {imageUrl ? (
+        <div className="relative h-20 w-full bg-white/5">
+          <Image src={imageUrl} alt={label} fill unoptimized className="object-cover" />
+        </div>
+      ) : null}
+      <div className="flex flex-1 flex-col items-start justify-between p-3.5">
+        <span className="line-clamp-2 text-sm font-semibold">{label}</span>
+        <span className="mt-2 text-sm font-bold text-brand-light">{formatNaira(price)}</span>
+      </div>
+    </button>
+  );
+}
+
+function CartRow({
+  label,
+  price,
+  quantity,
+  onInc,
+  onDec,
+  badge,
+  subContent,
+}: {
+  label: string;
+  price: number;
+  quantity: number;
+  onInc: () => void;
+  onDec: () => void;
+  badge?: string;
+  subContent?: string;
+}) {
+  return (
+    <div className="mb-2 rounded-lg bg-white/[0.03] p-2">
+      <div className="flex items-center justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <p className="flex items-center gap-1.5 line-clamp-1 text-sm">
+            {label}
+            {badge && <span className="shrink-0 rounded-full bg-brand/20 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-brand-light">{badge}</span>}
+          </p>
+          <p className="text-xs text-muted">{formatNaira(price)} each</p>
+        </div>
+        <div className="flex shrink-0 items-center gap-1.5">
+          <button onClick={onDec} className="flex h-6 w-6 items-center justify-center rounded-full bg-white/10 hover:bg-white/20">
+            <Minus size={11} />
+          </button>
+          <span className="w-4 text-center text-sm">{quantity}</span>
+          <button onClick={onInc} className="flex h-6 w-6 items-center justify-center rounded-full bg-white/10 hover:bg-white/20">
+            <Plus size={11} />
+          </button>
+        </div>
+      </div>
+      {subContent && <p className="mt-1.5 line-clamp-2 text-[11px] text-muted/80">Includes: {subContent}</p>}
+    </div>
+  );
+}

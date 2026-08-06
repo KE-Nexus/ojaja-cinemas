@@ -4,6 +4,8 @@ import { useActionState } from "react";
 import { createMovieAction, updateMovieAction, type FormState } from "@/actions/admin/movies";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Select, Textarea, FieldError } from "@/components/ui/input";
+import { MovieImageUploader } from "@/components/admin/movie-image-uploader";
+import { MovieTrailerField } from "@/components/admin/movie-trailer-field";
 import type { Movie } from "@prisma/client";
 
 export function MovieForm({ movie }: { movie?: Movie }) {
@@ -26,21 +28,12 @@ export function MovieForm({ movie }: { movie?: Movie }) {
         <Textarea id="synopsis" name="synopsis" rows={3} defaultValue={movie?.synopsis} required />
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div>
-          <Label htmlFor="posterUrl">Poster URL</Label>
-          <Input id="posterUrl" name="posterUrl" defaultValue={movie?.posterUrl} required />
-        </div>
-        <div>
-          <Label htmlFor="backdropUrl">Backdrop URL (optional)</Label>
-          <Input id="backdropUrl" name="backdropUrl" defaultValue={movie?.backdropUrl ?? ""} />
-        </div>
+      <div className="grid gap-4 sm:grid-cols-[auto_1fr]">
+        <MovieImageUploader id="poster" name="poster" label="Poster" currentUrl={movie?.posterUrl} shape="poster" required />
+        <MovieImageUploader id="backdrop" name="backdrop" label="Backdrop (optional)" currentUrl={movie?.backdropUrl} shape="backdrop" />
       </div>
 
-      <div>
-        <Label htmlFor="trailerUrl">Trailer embed URL (optional)</Label>
-        <Input id="trailerUrl" name="trailerUrl" defaultValue={movie?.trailerUrl ?? ""} placeholder="https://www.youtube.com/embed/..." />
-      </div>
+      <MovieTrailerField currentUrl={movie?.trailerUrl} />
 
       <div className="grid gap-4 sm:grid-cols-3">
         <div>
