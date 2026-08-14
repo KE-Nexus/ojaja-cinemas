@@ -38,6 +38,7 @@ export default async function EditPriceCardPage({ params }: { params: Promise<{ 
             kindLabel: kindLabel(t.kind),
             type: t.type,
             defaultPrice: t.defaultPrice,
+            branchId: t.branchId,
           }))}
           initialTicketIds={priceCard.tickets.map((t) => t.ticketClassId)}
         />

@@ -65,6 +65,7 @@ export async function createPendingBookingAction(_prev: FormState, formData: For
 
   const showtime = await prisma.showtime.findUnique({ where: { id: parsed.data.showtimeId } });
   if (!showtime) return { error: "This showtime no longer exists." };
+  if (!showtime.salesOnWeb) return { error: "This showtime isn't available for online booking." };
 
   const activeLocks = await prisma.seatLock.findMany({
     where: {

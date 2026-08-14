@@ -301,6 +301,8 @@ model Showtime {
   status              ShowtimeStatus @default(OPEN)
   trailerDurationMins Int            @default(0)
   cleanupTimeMins     Int            @default(0)
+  salesOnPos          Boolean        @default(true)
+  salesOnWeb          Boolean        @default(true)
 
   movie      Movie      @relation(fields: [movieId], references: [id], onDelete: Cascade)
   auditorium Auditorium @relation(fields: [auditoriumId], references: [id], onDelete: Cascade)

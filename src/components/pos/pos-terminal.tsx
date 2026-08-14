@@ -1,12 +1,33 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { forwardRef, useEffect, useRef, useState, useTransition } from "react";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { AnimatePresence, motion } from "framer-motion";
-import { Ticket, Trash2, Plus, Minus, CreditCard, Banknote, LogOut, Film, PauseCircle, PlayCircle, Search } from "lucide-react";
+import {
+  Ticket,
+  Trash2,
+  Plus,
+  Minus,
+  CreditCard,
+  Banknote,
+  LogOut,
+  Film,
+  PauseCircle,
+  PlayCircle,
+  Search,
+  CupSoda,
+  CalendarDays,
+  XCircle,
+  RefreshCw,
+  Users,
+  ClipboardList,
+  Wifi,
+  Receipt,
+} from "lucide-react";
 import { posCheckoutAction } from "@/actions/pos/checkout";
-import { openCashDrawerAction } from "@/actions/pos/tools";
+import { openCashDrawerAction, getShowtimesForDateAction } from "@/actions/pos/tools";
 import { logoutAction } from "@/actions/auth";
 import { formatNaira } from "@/lib/format";
 import { cn } from "@/lib/cn";
@@ -18,6 +39,7 @@ import { UserSalesModal } from "@/components/pos/user-sales-modal";
 import { OrdersModal } from "@/components/pos/orders-modal";
 import { CloseSessionModal } from "@/components/pos/close-session-modal";
 import { SwapTicketModal } from "@/components/pos/swap-ticket-modal";
+import { PosDatePicker } from "@/components/pos/pos-date-picker";
 import type { SeatCategory, TicketClassKind } from "@prisma/client";
 
 type ShowtimeOption = {
@@ -52,10 +74,23 @@ type HeldOrder = {
   itemLines: Record<string, ItemCartLine>;
 };
 
+const CONCESSION_PAGE_SIZE = 15;
+
+function toLocalDateStr(d: Date) {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function isSameDay(a: Date, b: Date) {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+}
+
 export function PosTerminal({
   staffName,
   branchName,
-  showtimes,
+  showtimes: initialShowtimes,
   ticketClasses,
   items,
   canCloseSessionSelf,
@@ -67,8 +102,12 @@ export function PosTerminal({
   items: ItemOption[];
   canCloseSessionSelf: boolean;
 }) {
-  const groups = useMemo(() => Array.from(new Set(items.map((i) => i.group))).sort(), [items]);
-  const [activeTab, setActiveTab] = useState<string>("tickets");
+  const router = useRouter();
+  const [activeTab, setActiveTab] = useState<"tickets" | "concession">("tickets");
+  const [selectedDate, setSelectedDate] = useState(() => new Date());
+  const [showtimes, setShowtimes] = useState<ShowtimeOption[]>(initialShowtimes);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [concessionPage, setConcessionPage] = useState(0);
   const [selectedShowtimeId, setSelectedShowtimeId] = useState<string | null>(null);
   const [ticketLines, setTicketLines] = useState<Record<string, TicketCartLine>>({});
   const [itemLines, setItemLines] = useState<Record<string, ItemCartLine>>({});
@@ -77,11 +116,30 @@ export function PosTerminal({
   const [activeModal, setActiveModal] = useState<"findItem" | "findBooking" | "userSales" | "orders" | "closeSession" | "swapTicket" | null>(null);
   const [now, setNow] = useState(() => new Date());
   const [isPending, startTransition] = useTransition();
+  const [isDatePending, startDateTransition] = useTransition();
+  const dateTabRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(id);
   }, []);
+
+  function changeDate(date: Date) {
+    if (Object.keys(ticketLines).length > 0) {
+      if (!confirm("Switching days will clear the tickets already in this order. Continue?")) return;
+      setTicketLines({});
+    }
+    setSelectedShowtimeId(null);
+    setSelectedDate(date);
+    startDateTransition(async () => {
+      const result = await getShowtimesForDateAction(toLocalDateStr(date));
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+      setShowtimes(result.showtimes ?? []);
+    });
+  }
 
   const selectedShowtime = showtimes.find((s) => s.id === selectedShowtimeId) ?? null;
 
@@ -145,6 +203,13 @@ export function PosTerminal({
     setSelectedShowtimeId(null);
   }
 
+  function abortOrder() {
+    if (cartEmpty) return;
+    if (!confirm("Abort this order? Everything in the cart will be cleared.")) return;
+    clearCart();
+    toast("Order aborted.");
+  }
+
   function holdOrder() {
     if (cartEmpty) return;
     const held: HeldOrder = {
@@ -186,7 +251,7 @@ export function PosTerminal({
     setHeldOrders((prev) => prev.filter((h) => h.id !== id));
   }
 
-  function handleOthersSelect(action: "findBooking" | "userSales" | "openCashDrawer" | "orders" | "closeSession" | "swapTicket") {
+  function handleOthersSelect(action: "openCashDrawer" | "closeSession" | "swapTicket") {
     if (action === "openCashDrawer") {
       startTransition(async () => {
         const result = await openCashDrawerAction();
@@ -230,14 +295,24 @@ export function PosTerminal({
     <div className="flex h-screen flex-col">
       {/* Top bar */}
       <div className="flex items-center gap-2 overflow-x-auto border-b border-white/10 bg-gradient-to-r from-brand/20 via-black to-accent-cyan/10 px-4 py-3">
-        <TabPill active={activeTab === "tickets"} onClick={() => setActiveTab("tickets")} icon={<Ticket size={14} />}>
-          Tickets
+        <TabPill active={activeTab === "concession"} onClick={() => setActiveTab("concession")} icon={<CupSoda size={14} />}>
+          Concession
         </TabPill>
-        {groups.map((g) => (
-          <TabPill key={g} active={activeTab === g} onClick={() => setActiveTab(g)}>
-            {g}
-          </TabPill>
-        ))}
+        <TabPill
+          ref={dateTabRef}
+          active={activeTab === "tickets"}
+          onClick={() => {
+            if (activeTab === "tickets") setShowDatePicker((v) => !v);
+            else setActiveTab("tickets");
+          }}
+          icon={<Ticket size={14} />}
+        >
+          Tickets {isSameDay(selectedDate, now) ? "Today" : selectedDate.toLocaleDateString("en-NG", { weekday: "short", month: "short", day: "numeric" })}
+          <CalendarDays size={12} className="opacity-70" />
+        </TabPill>
+        {showDatePicker && (
+          <PosDatePicker anchorRef={dateTabRef} value={selectedDate} onSelect={changeDate} onClose={() => setShowDatePicker(false)} />
+        )}
         <div className="ml-auto flex shrink-0 items-center gap-2">
           <button
             onClick={() => setActiveModal("findItem")}
@@ -256,7 +331,6 @@ export function PosTerminal({
               </span>
             )}
           </button>
-          <OthersMenu onSelect={handleOthersSelect} />
         </div>
       </div>
 
@@ -266,9 +340,14 @@ export function PosTerminal({
           <AnimatePresence mode="wait">
             {activeTab === "tickets" ? (
               <motion.div key="tickets" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}>
-                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Today&rsquo;s Showtimes</p>
-                {showtimes.length === 0 ? (
-                  <p className="rounded-xl border border-dashed border-white/10 p-6 text-center text-sm text-muted">No sessions scheduled today.</p>
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">
+                  Showtimes ·{" "}
+                  {selectedDate.toLocaleDateString("en-NG", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
+                </p>
+                {isDatePending ? (
+                  <p className="rounded-xl border border-dashed border-white/10 p-6 text-center text-sm text-muted">Loading showtimes...</p>
+                ) : showtimes.length === 0 ? (
+                  <p className="rounded-xl border border-dashed border-white/10 p-6 text-center text-sm text-muted">No sessions scheduled this day.</p>
                 ) : (
                   <div className="mb-6 flex gap-3 overflow-x-auto pb-2">
                     {showtimes.map((st) => (
@@ -312,15 +391,42 @@ export function PosTerminal({
                 )}
               </motion.div>
             ) : (
-              <motion.div key={activeTab} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}>
-                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">{activeTab}</p>
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-                  {items
-                    .filter((it) => it.group === activeTab)
-                    .map((it) => (
-                      <GridTile key={it.id} label={it.name} price={it.price} imageUrl={it.imageUrl} onClick={() => addItem(it)} />
-                    ))}
-                </div>
+              <motion.div key="concession" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}>
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Concession</p>
+                {items.length === 0 ? (
+                  <p className="rounded-xl border border-dashed border-white/10 p-6 text-center text-sm text-muted">No items available at this cinema.</p>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+                      {items.slice(concessionPage * CONCESSION_PAGE_SIZE, (concessionPage + 1) * CONCESSION_PAGE_SIZE).map((it) => (
+                        <GridTile key={it.id} label={it.name} price={it.price} imageUrl={it.imageUrl} onClick={() => addItem(it)} />
+                      ))}
+                    </div>
+                    {items.length > CONCESSION_PAGE_SIZE && (
+                      <div className="mt-4 flex flex-wrap items-center gap-1.5">
+                        {Array.from({ length: Math.ceil(items.length / CONCESSION_PAGE_SIZE) }, (_, i) => (
+                          <button
+                            key={i}
+                            onClick={() => setConcessionPage(i)}
+                            className={cn(
+                              "rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors",
+                              concessionPage === i ? "border-brand-light bg-brand text-white" : "border-white/10 text-muted hover:border-white/30 hover:text-white"
+                            )}
+                          >
+                            Page {i + 1}
+                          </button>
+                        ))}
+                        <button
+                          onClick={() => setConcessionPage((p) => Math.min(p + 1, Math.ceil(items.length / CONCESSION_PAGE_SIZE) - 1))}
+                          disabled={concessionPage >= Math.ceil(items.length / CONCESSION_PAGE_SIZE) - 1}
+                          className="rounded-lg border border-white/10 px-3 py-1.5 text-xs font-medium text-muted transition-colors hover:border-white/30 hover:text-white disabled:opacity-30"
+                        >
+                          Next
+                        </button>
+                      </div>
+                    )}
+                  </>
+                )}
               </motion.div>
             )}
           </AnimatePresence>
@@ -331,14 +437,9 @@ export function PosTerminal({
           <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
             <p className="text-sm font-semibold">Current Order</p>
             {!cartEmpty && (
-              <div className="flex items-center gap-3">
-                <button onClick={holdOrder} className="flex items-center gap-1 text-xs text-muted hover:text-white">
-                  <PauseCircle size={12} /> Hold
-                </button>
-                <button onClick={clearCart} className="flex items-center gap-1 text-xs text-danger hover:underline">
-                  <Trash2 size={12} /> Clear
-                </button>
-              </div>
+              <button onClick={clearCart} className="flex items-center gap-1 text-xs text-danger hover:underline">
+                <Trash2 size={12} /> Clear
+              </button>
             )}
           </div>
 
@@ -398,24 +499,49 @@ export function PosTerminal({
               <span className="text-muted">Order Total</span>
               <span className="text-lg font-bold text-white">{formatNaira(total)}</span>
             </div>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                disabled={cartEmpty}
+                onClick={holdOrder}
+                className="flex flex-col items-center justify-center gap-1 rounded-xl border border-white/10 bg-white/5 py-3 text-xs font-semibold text-white transition-transform active:scale-95 disabled:opacity-30"
+              >
+                <PauseCircle size={16} /> Hold
+              </button>
               <button
                 disabled={cartEmpty || isPending}
                 onClick={() => checkout("CASH")}
-                className="flex items-center justify-center gap-1.5 rounded-xl bg-success py-3 text-sm font-semibold text-black transition-transform active:scale-95 disabled:opacity-30"
+                className="flex flex-col items-center justify-center gap-1 rounded-xl bg-success py-3 text-xs font-semibold text-black transition-transform active:scale-95 disabled:opacity-30"
               >
                 <Banknote size={16} /> Cash
               </button>
               <button
                 disabled={cartEmpty || isPending}
                 onClick={() => checkout("CARD")}
-                className="flex items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-brand to-accent-cyan py-3 text-sm font-semibold text-white transition-transform active:scale-95 disabled:opacity-30"
+                className="flex flex-col items-center justify-center gap-1 rounded-xl bg-gradient-to-r from-brand to-accent-cyan py-3 text-xs font-semibold text-white transition-transform active:scale-95 disabled:opacity-30"
               >
                 <CreditCard size={16} /> Card
               </button>
             </div>
           </div>
         </aside>
+      </div>
+
+      {/* Bottom action bar */}
+      <div className="flex flex-wrap items-stretch divide-x divide-white/10 border-t border-white/10 bg-white/[0.03] text-xs font-medium text-muted">
+        <form action={logoutAction} className="contents">
+          <ActionBarButton type="submit" icon={<LogOut size={13} />} label="Log Off" />
+        </form>
+        <ActionBarButton icon={<XCircle size={13} />} label="Abort" onClick={abortOrder} danger />
+        <ActionBarButton icon={<RefreshCw size={13} />} label="Refresh" onClick={() => router.refresh()} />
+        <ActionBarButton icon={<Receipt size={13} />} label="Today's Sales" onClick={() => setActiveModal("orders")} />
+        <ActionBarButton icon={<Users size={13} />} label="Get Sales By User" onClick={() => setActiveModal("userSales")} />
+        <ActionBarButton icon={<ClipboardList size={13} />} label="Find Booking" onClick={() => setActiveModal("findBooking")} />
+        <ActionBarButton
+          icon={<Wifi size={13} />}
+          label="Mode: Online"
+          onClick={() => toast("OJAJA POS runs online-only — there's no offline mode in this deployment.")}
+        />
+        <OthersMenu onSelect={handleOthersSelect} />
       </div>
 
       {/* Bottom status bar */}
@@ -425,11 +551,9 @@ export function PosTerminal({
         <span>
           {staffName} · {branchName}
         </span>
-        <form action={logoutAction}>
-          <button type="submit" className="flex items-center gap-1 hover:text-foreground">
-            <LogOut size={12} /> Log Off
-          </button>
-        </form>
+        <span className="flex items-center gap-1 text-success">
+          <Wifi size={12} /> Online
+        </span>
       </div>
 
       {showHeldOrders && (
@@ -484,22 +608,59 @@ export function PosTerminal({
       {activeModal === "closeSession" && (
         <CloseSessionModal canCloseSelf={canCloseSessionSelf} onClose={() => setActiveModal(null)} />
       )}
-      {activeModal === "swapTicket" && <SwapTicketModal onClose={() => setActiveModal(null)} />}
+      {activeModal === "swapTicket" && (
+        <SwapTicketModal
+          replacementLines={Object.values(ticketLines).map((l) => ({ ticketClassId: l.ticketClassId, label: l.label, quantity: l.quantity }))}
+          onSwapComplete={() => setTicketLines({})}
+          onClose={() => setActiveModal(null)}
+        />
+      )}
     </div>
   );
 }
 
-function TabPill({ active, onClick, icon, children }: { active: boolean; onClick: () => void; icon?: React.ReactNode; children: React.ReactNode }) {
+const TabPill = forwardRef<HTMLButtonElement, { active: boolean; onClick: () => void; icon?: React.ReactNode; children: React.ReactNode }>(
+  function TabPill({ active, onClick, icon, children }, ref) {
+    return (
+      <button
+        ref={ref}
+        onClick={onClick}
+        className={cn(
+          "flex shrink-0 items-center gap-1.5 rounded-full border px-4 py-1.5 text-sm font-medium transition-all",
+          active ? "border-brand-light bg-brand text-white shadow-[0_0_16px_-2px_rgba(194,44,201,0.7)]" : "border-white/10 text-muted hover:border-white/30 hover:text-white"
+        )}
+      >
+        {icon}
+        {children}
+      </button>
+    );
+  }
+);
+
+function ActionBarButton({
+  icon,
+  label,
+  onClick,
+  type = "button",
+  danger,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  onClick?: () => void;
+  type?: "button" | "submit";
+  danger?: boolean;
+}) {
   return (
     <button
+      type={type}
       onClick={onClick}
       className={cn(
-        "flex shrink-0 items-center gap-1.5 rounded-full border px-4 py-1.5 text-sm font-medium transition-all",
-        active ? "border-brand-light bg-brand text-white shadow-[0_0_16px_-2px_rgba(194,44,201,0.7)]" : "border-white/10 text-muted hover:border-white/30 hover:text-white"
+        "flex flex-1 flex-col items-center gap-1 whitespace-nowrap px-3 py-2.5 transition-colors hover:bg-white/10 hover:text-white",
+        danger && "text-danger hover:text-danger"
       )}
     >
       {icon}
-      {children}
+      <span>{label}</span>
     </button>
   );
 }

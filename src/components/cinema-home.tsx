@@ -117,7 +117,7 @@ export function CinemaHome({ branch, scheduledMovies }: { branch: CinemaHomeBran
                 {branch.auditoriums.map((a) => a.screenType).join(", ")}
               </p>
               <Link
-                href={`/showtimes?branch=${branch.id}`}
+                href={`/movies?location=${branch.id}`}
                 className="mt-4 flex items-center justify-center gap-2 rounded-lg bg-brand px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-light"
               >
                 <Play size={15} className="fill-white" /> Book Tickets Here
@@ -135,7 +135,7 @@ export async function getScheduledMoviesForBranch(branch: { id: string; useFilmS
   return prisma.movie.findMany({
     where: {
       status: "NOW_SHOWING",
-      showtimes: { some: { startTime: { gte: new Date() }, status: "OPEN", auditorium: { branchId: branch.id } } },
+      showtimes: { some: { startTime: { gte: new Date() }, status: "OPEN", salesOnWeb: true, auditorium: { branchId: branch.id } } },
     },
     orderBy: { releaseDate: "desc" },
     take: 6,

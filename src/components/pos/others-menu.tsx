@@ -2,23 +2,20 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { MoreHorizontal, ClipboardList, Users, DoorOpen, ListOrdered, Lock, Repeat } from "lucide-react";
+import { MoreHorizontal, DoorOpen, Lock, Repeat } from "lucide-react";
 import { cn } from "@/lib/cn";
 
-type OthersAction = "findBooking" | "userSales" | "openCashDrawer" | "orders" | "closeSession" | "swapTicket";
+type OthersAction = "openCashDrawer" | "closeSession" | "swapTicket";
 
 const OPTIONS: { action: OthersAction; label: string; icon: React.ReactNode }[] = [
-  { action: "findBooking", label: "Find Booking", icon: <ClipboardList size={15} /> },
   { action: "swapTicket", label: "Swap Ticket", icon: <Repeat size={15} /> },
-  { action: "orders", label: "Orders", icon: <ListOrdered size={15} /> },
-  { action: "userSales", label: "Get Sales By User", icon: <Users size={15} /> },
   { action: "openCashDrawer", label: "Open Cash Drawer", icon: <DoorOpen size={15} /> },
   { action: "closeSession", label: "Close Session", icon: <Lock size={15} /> },
 ];
 
 export function OthersMenu({ onSelect }: { onSelect: (action: OthersAction) => void }) {
   const [open, setOpen] = useState(false);
-  const [pos, setPos] = useState({ top: 0, right: 0 });
+  const [pos, setPos] = useState({ bottom: 0, right: 0 });
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -40,7 +37,9 @@ export function OthersMenu({ onSelect }: { onSelect: (action: OthersAction) => v
   function toggle() {
     if (!open && buttonRef.current) {
       const rect = buttonRef.current.getBoundingClientRect();
-      setPos({ top: rect.bottom + 8, right: window.innerWidth - rect.right });
+      // Opens upward (dropup) — this button lives in the bottom action bar, so a
+      // downward panel would run off the bottom of the viewport and get clipped.
+      setPos({ bottom: window.innerHeight - rect.top + 8, right: window.innerWidth - rect.right });
     }
     setOpen((v) => !v);
   }
@@ -61,7 +60,7 @@ export function OthersMenu({ onSelect }: { onSelect: (action: OthersAction) => v
         createPortal(
           <div
             ref={menuRef}
-            style={{ top: pos.top, right: pos.right }}
+            style={{ bottom: pos.bottom, right: pos.right }}
             className="fixed z-50 w-56 overflow-hidden rounded-xl border border-white/10 bg-[#0a0a0f] py-1.5 shadow-[0_10px_40px_-10px_rgba(0,0,0,0.8)]"
           >
             {OPTIONS.map((opt) => (

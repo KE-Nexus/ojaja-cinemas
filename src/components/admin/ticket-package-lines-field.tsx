@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { PickItemModal, type PickableOption } from "@/components/admin/pick-item-modal";
 
 export type TicketLineOption = PickableOption;
-type SelectedLine = { id: string; quantity: number };
+export type SelectedLine = { id: string; quantity: number };
 
 function BundleLinesField({
   title,
@@ -16,6 +16,7 @@ function BundleLinesField({
   options,
   initialLines,
   modalColumns,
+  onChange,
 }: {
   title: string;
   addLabel: string;
@@ -25,6 +26,7 @@ function BundleLinesField({
   options: TicketLineOption[];
   initialLines: SelectedLine[];
   modalColumns: 1 | 3;
+  onChange?: (lines: SelectedLine[]) => void;
 }) {
   const [selected, setSelected] = useState<SelectedLine[]>(initialLines);
   const [modalOpen, setModalOpen] = useState(false);
@@ -32,12 +34,20 @@ function BundleLinesField({
   const selectedIds = new Set(selected.map((s) => s.id));
   const priceById = new Map(options.map((o) => [o.id, o.defaultPrice]));
 
+  function updateSelected(updater: (prev: SelectedLine[]) => SelectedLine[]) {
+    setSelected((prev) => {
+      const next = updater(prev);
+      onChange?.(next);
+      return next;
+    });
+  }
+
   function toggle(id: string) {
-    setSelected((prev) => (prev.some((s) => s.id === id) ? prev.filter((s) => s.id !== id) : [...prev, { id, quantity: 1 }]));
+    updateSelected((prev) => (prev.some((s) => s.id === id) ? prev.filter((s) => s.id !== id) : [...prev, { id, quantity: 1 }]));
   }
 
   function toggleAll(visibleIds: string[]) {
-    setSelected((prev) => {
+    updateSelected((prev) => {
       const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => prev.some((s) => s.id === id));
       if (allVisibleSelected) return prev.filter((s) => !visibleIds.includes(s.id));
       const existingIds = new Set(prev.map((s) => s.id));
@@ -89,7 +99,7 @@ function BundleLinesField({
                     value={row.quantity}
                     onChange={(e) => {
                       const quantity = Math.max(1, Number(e.currentTarget.value) || 1);
-                      setSelected((prev) => prev.map((s) => (s.id === row.id ? { ...s, quantity } : s)));
+                      updateSelected((prev) => prev.map((s) => (s.id === row.id ? { ...s, quantity } : s)));
                     }}
                     className="w-20"
                     required
@@ -123,9 +133,11 @@ function BundleLinesField({
 export function TicketBundleLinesField({
   options,
   initialLines,
+  onChange,
 }: {
   options: TicketLineOption[];
   initialLines: SelectedLine[];
+  onChange?: (lines: SelectedLine[]) => void;
 }) {
   return (
     <BundleLinesField
@@ -137,6 +149,7 @@ export function TicketBundleLinesField({
       options={options}
       initialLines={initialLines}
       modalColumns={1}
+      onChange={onChange}
     />
   );
 }
@@ -144,9 +157,11 @@ export function TicketBundleLinesField({
 export function ItemBundleLinesField({
   options,
   initialLines,
+  onChange,
 }: {
   options: TicketLineOption[];
   initialLines: SelectedLine[];
+  onChange?: (lines: SelectedLine[]) => void;
 }) {
   return (
     <BundleLinesField
@@ -158,6 +173,7 @@ export function ItemBundleLinesField({
       options={options}
       initialLines={initialLines}
       modalColumns={3}
+      onChange={onChange}
     />
   );
 }

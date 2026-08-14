@@ -4,15 +4,25 @@ import { useMemo, useState } from "react";
 import { colorForMovie } from "@/lib/schedule-colors";
 import { formatTime } from "@/lib/format";
 import { SessionDetailModal } from "@/components/admin/session-detail-modal";
+import { useSchedulingActions } from "@/components/admin/scheduling-provider";
+import { toDatetimeLocal } from "@/components/admin/create-film-sessions-modal";
 
 export type ScheduleSession = {
   id: string;
   movieId: string;
   movieTitle: string;
+  auditoriumId: string;
+  priceCardId: string | null;
   language: string;
   format: string;
   startTime: string; // ISO
+  endTime: string | null; // ISO
   runtimeMins: number;
+  trailerDurationMins: number;
+  cleanupTimeMins: number;
+  status: string;
+  salesOnPos: boolean;
+  salesOnWeb: boolean;
   bookedSeats: number;
   capacity: number;
 };
@@ -27,8 +37,9 @@ const HOUR_WIDTH = 56;
 const START_HOUR = 0;
 const END_HOUR = 24;
 
-export function SchedulingDayView({ rooms }: { rooms: ScheduleRoom[] }) {
+export function SchedulingDayView({ rooms, dayStartISO }: { rooms: ScheduleRoom[]; dayStartISO: string }) {
   const [selected, setSelected] = useState<ScheduleSession | null>(null);
+  const { openCreateModal } = useSchedulingActions();
   const hours = useMemo(() => Array.from({ length: END_HOUR - START_HOUR }, (_, i) => START_HOUR + i), []);
   const totalWidth = hours.length * HOUR_WIDTH;
 
@@ -37,6 +48,19 @@ export function SchedulingDayView({ rooms }: { rooms: ScheduleRoom[] }) {
     rooms.forEach((r) => r.sessions.forEach((s) => map.set(s.movieId, s.movieTitle)));
     return Array.from(map.entries());
   }, [rooms]);
+
+  // Only fires for a direct click on the empty timeline background — session blocks and
+  // hour gridlines are children, so a click that bubbles from one of those has a different
+  // e.target, and this guard skips it (they already have their own click handling).
+  function handleTimelineClick(e: React.MouseEvent<HTMLDivElement>, roomId: string) {
+    if (e.target !== e.currentTarget) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const decimalHour = START_HOUR + (e.clientX - rect.left) / HOUR_WIDTH;
+    const snappedMinutes = Math.round((decimalHour * 60) / 15) * 15;
+    const day = new Date(dayStartISO);
+    const clicked = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 0, snappedMinutes);
+    openCreateModal({ auditoriumId: roomId, startTime: toDatetimeLocal(clicked) });
+  }
 
   return (
     <div>
@@ -59,7 +83,12 @@ export function SchedulingDayView({ rooms }: { rooms: ScheduleRoom[] }) {
               <div className="flex w-24 shrink-0 items-center border-r border-border bg-surface-2 px-2 py-3 text-sm font-medium">
                 {room.name}
               </div>
-              <div className="relative" style={{ width: totalWidth, height: 100 }}>
+              <div
+                className="relative cursor-pointer"
+                style={{ width: totalWidth, height: 100 }}
+                onClick={(e) => handleTimelineClick(e, room.id)}
+                title="Click to schedule a session at this time"
+              >
                 {hours.map((h) => (
                   <div
                     key={h}

@@ -127,6 +127,7 @@ export async function posCheckoutAction(cart: CartInput, paymentMethod: "CASH" |
   if (showtime.auditorium.branchId !== staffSession.branchId) {
     return { error: "This showtime doesn't belong to your cinema." };
   }
+  if (!showtime.salesOnPos) return { error: "This showtime isn't available for sale on POS." };
 
   const ticketClasses = await prisma.ticketClass.findMany({ where: { id: { in: ticketLines.map((l) => l.ticketClassId) } } });
   if (ticketClasses.length !== ticketLines.length) return { error: "One or more ticket types couldn't be found." };

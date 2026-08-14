@@ -13,6 +13,43 @@ function startOfDay(offset = 0) {
   return d;
 }
 
+export type PosShowtimeOption = {
+  id: string;
+  movieTitle: string;
+  posterUrl: string;
+  auditoriumName: string;
+  format: string;
+  startTime: string;
+};
+
+/** Powers the Tickets tab's date picker — lets a cashier sell tickets for any future session, not just today's. */
+export async function getShowtimesForDateAction(dateStr: string): Promise<{ error?: string; showtimes?: PosShowtimeOption[] }> {
+  const session = await requireRole(["TICKETER", "SUPERVISOR", "CIRCUIT_ADMIN"]);
+  const staffSession = await prisma.staffSession.findFirst({ where: { staffId: session.sub, status: "OPEN" } });
+  if (!staffSession) return { error: "Open a session first." };
+
+  const dayStart = new Date(`${dateStr}T00:00:00`);
+  if (Number.isNaN(dayStart.getTime())) return { error: "Invalid date." };
+  const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
+
+  const showtimes = await prisma.showtime.findMany({
+    where: { auditorium: { branchId: staffSession.branchId }, startTime: { gte: dayStart, lt: dayEnd }, status: "OPEN", salesOnPos: true },
+    include: { movie: true, auditorium: true },
+    orderBy: { startTime: "asc" },
+  });
+
+  return {
+    showtimes: showtimes.map((st) => ({
+      id: st.id,
+      movieTitle: st.movie.title,
+      posterUrl: st.movie.posterUrl,
+      auditoriumName: st.auditorium.name,
+      format: st.format,
+      startTime: st.startTime.toISOString(),
+    })),
+  };
+}
+
 export type AdminPinResult = { ok: boolean; name?: string; error?: string };
 
 /** Any action that needs a Supervisor/CircuitAdmin to authorize something a Ticketer can't do alone. */
@@ -154,19 +191,32 @@ export async function openCashDrawerAction(): Promise<{ error?: string; success?
   return { success: true };
 }
 
-/** Re-seats a booking into different available seats of the same categories it already has — reuses the existing swap action so the claim check and conflict logic stay in one place. */
-export async function posSwapTicketAction(reference: string): Promise<{ error?: string; success?: boolean }> {
+/**
+ * Re-seats a booking using the replacement ticket type(s) the cashier has staged in the
+ * POS cart — this is what makes a genuine class swap possible (e.g. Standard → Recliner),
+ * not just a same-category reshuffle. Reuses the existing admin swap action so the claim
+ * check and seat-conflict logic stay in one place.
+ */
+export async function posSwapTicketAction(reference: string, replacementTicketClassIds: string[]): Promise<{ error?: string; success?: boolean }> {
   const session = await requireRole(["TICKETER", "SUPERVISOR", "CIRCUIT_ADMIN"]);
   const staffSession = await prisma.staffSession.findFirst({ where: { staffId: session.sub, status: "OPEN" } });
   if (!staffSession) return { error: "Open a session first." };
+  if (replacementTicketClassIds.length === 0) return { error: "Ensure you have added the replacement ticket to cart." };
 
   const booking = await prisma.booking.findUnique({
     where: { reference: reference.trim().toUpperCase() },
-    include: { seats: { include: { seat: true } }, showtime: { include: { auditorium: true } } },
+    include: { seats: true, showtime: { include: { auditorium: true } } },
   });
   if (!booking) return { error: "Booking not found." };
   if (booking.status !== "CONFIRMED") return { error: "Only confirmed bookings can have seats swapped." };
   if (booking.showtime.auditorium.branchId !== staffSession.branchId) return { error: "This booking isn't at your cinema." };
+  if (replacementTicketClassIds.length !== booking.seats.length) {
+    return { error: `Add exactly ${booking.seats.length} replacement ticket(s) to the cart to match this booking's seat count.` };
+  }
+
+  const replacementClasses = await prisma.ticketClass.findMany({ where: { id: { in: replacementTicketClassIds } } });
+  if (replacementClasses.length !== replacementTicketClassIds.length) return { error: "One or more replacement tickets couldn't be found." };
+  if (replacementClasses.some((t) => t.branchId !== staffSession.branchId)) return { error: "One or more replacement tickets don't belong to your cinema." };
 
   const [bookedSeatIds, lockedSeatIds, allSeats] = await Promise.all([
     prisma.bookingSeat
@@ -180,11 +230,12 @@ export async function posSwapTicketAction(reference: string): Promise<{ error?: 
 
   const claimed = new Set([...bookedSeatIds, ...lockedSeatIds]);
   const newSeatIds: string[] = [];
-  for (const bs of booking.seats) {
+  for (const ticketClassId of replacementTicketClassIds) {
+    const tc = replacementClasses.find((t) => t.id === ticketClassId)!;
     const candidate = allSeats.find(
-      (s) => s.id !== bs.seatId && s.category === bs.seat.category && !claimed.has(s.id) && !newSeatIds.includes(s.id)
+      (s) => !claimed.has(s.id) && !newSeatIds.includes(s.id) && (!tc.seatClass || s.category === tc.seatClass)
     );
-    if (!candidate) return { error: `No other available ${bs.seat.category} seat to swap into.` };
+    if (!candidate) return { error: `No available ${tc.seatClass ?? ""} seat for "${tc.description}".` };
     newSeatIds.push(candidate.id);
   }
 
@@ -195,6 +246,43 @@ export async function posSwapTicketAction(reference: string): Promise<{ error?: 
   const result = await swapBookingSeatsAction(null, fd);
   if (result?.error) return { error: result.error };
   return { success: true };
+}
+
+export type SessionExpectedTotals = { cash: number; card: number; transfer: number; voucher: number };
+
+/**
+ * What the drawer *should* contain, broken down by tender type, for the cashier's own
+ * currently-open session — bookings aren't linked to a StaffSession directly, but since a
+ * cashier can only ever have one open session at a time (enforced at open-time) and every
+ * POS booking requires one, `createdAt >= session.openedAt` reliably scopes to this session.
+ * Transfer/Voucher are always 0 here honestly, not fabricated — POS checkout only ever
+ * writes CASH or CARD payments today.
+ */
+export async function getSessionExpectedTotalsAction(): Promise<{ error?: string; totals?: SessionExpectedTotals }> {
+  const session = await requireRole(["TICKETER", "SUPERVISOR", "CIRCUIT_ADMIN"]);
+  const staffSession = await prisma.staffSession.findFirst({ where: { staffId: session.sub, status: "OPEN" } });
+  if (!staffSession) return { error: "No open session." };
+
+  const [bookings, concessionSales] = await Promise.all([
+    prisma.booking.findMany({
+      where: { processedById: session.sub, status: "CONFIRMED", createdAt: { gte: staffSession.openedAt } },
+      include: { payments: true },
+    }),
+    prisma.posConcessionSale.findMany({ where: { staffSessionId: staffSession.id } }),
+  ]);
+
+  const totals: SessionExpectedTotals = { cash: 0, card: 0, transfer: 0, voucher: 0 };
+  for (const b of bookings) {
+    const method = b.payments[0]?.method;
+    if (method === "CASH") totals.cash += b.totalAmount;
+    else if (method === "CARD") totals.card += b.totalAmount;
+  }
+  for (const s of concessionSales) {
+    if (s.paymentMethod === "CASH") totals.cash += s.totalAmount;
+    else if (s.paymentMethod === "CARD") totals.card += s.totalAmount;
+  }
+
+  return { totals };
 }
 
 /**

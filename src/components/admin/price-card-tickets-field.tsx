@@ -3,19 +3,29 @@
 import { useState } from "react";
 import { PickItemModal } from "@/components/admin/pick-item-modal";
 
-export type PriceCardTicketOption = { id: string; label: string; kindLabel: string; type: string; defaultPrice: number };
+export type PriceCardTicketOption = { id: string; label: string; kindLabel: string; type: string; defaultPrice: number; branchId: string };
 
 export function PriceCardTicketsField({
   options,
   initialTicketIds,
+  selectedBranchId,
 }: {
   options: PriceCardTicketOption[];
   initialTicketIds: string[];
+  selectedBranchId: string;
 }) {
   const [selectedIds, setSelectedIds] = useState<string[]>(initialTicketIds);
   const [modalOpen, setModalOpen] = useState(false);
-  const selected = new Set(selectedIds);
-  const byId = new Map(options.map((o) => [o.id, o]));
+
+  // Scoped to the cinema currently chosen in the form — a ticket that belongs to a
+  // different branch can never be picked, so a price card can't end up mismatched.
+  // Selections made under a different cinema are kept in state (not wiped) in case the
+  // user flips back to it, they're just not shown or submitted while it's not current.
+  const visibleOptions = options.filter((o) => o.branchId === selectedBranchId);
+  const branchVisibleIds = new Set(visibleOptions.map((o) => o.id));
+  const visibleSelectedIds = selectedIds.filter((id) => branchVisibleIds.has(id));
+  const selected = new Set(visibleSelectedIds);
+  const byId = new Map(visibleOptions.map((o) => [o.id, o]));
 
   function toggle(id: string) {
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
@@ -41,16 +51,18 @@ export function PriceCardTicketsField({
           <button
             type="button"
             onClick={() => setModalOpen(true)}
-            disabled={options.length === 0}
+            disabled={!selectedBranchId || visibleOptions.length === 0}
             className="rounded-lg bg-brand px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-light disabled:opacity-50"
           >
             Add Ticket
           </button>
         </div>
 
-        {options.length === 0 ? (
+        {!selectedBranchId ? (
+          <p className="p-4 text-sm text-muted">Select a cinema above to see its tickets.</p>
+        ) : visibleOptions.length === 0 ? (
           <p className="p-4 text-sm text-muted">No tickets exist at this cinema yet.</p>
-        ) : selectedIds.length === 0 ? (
+        ) : visibleSelectedIds.length === 0 ? (
           <p className="p-4 text-sm text-muted">None added yet.</p>
         ) : (
           <table className="w-full text-sm">
@@ -64,10 +76,10 @@ export function PriceCardTicketsField({
               </tr>
             </thead>
             <tbody>
-              {selectedIds.map((id, i) => {
+              {visibleSelectedIds.map((id, i) => {
                 const option = byId.get(id);
                 return (
-                  <tr key={id} className={i < selectedIds.length - 1 ? "border-b border-border/50" : ""}>
+                  <tr key={id} className={i < visibleSelectedIds.length - 1 ? "border-b border-border/50" : ""}>
                     <td className="p-2.5 text-brand-light">{option?.label ?? id}</td>
                     <td className="p-2.5 text-muted">{option?.kindLabel ?? "—"}</td>
                     <td className="p-2.5 text-muted">{option?.type ?? "—"}</td>
@@ -88,7 +100,7 @@ export function PriceCardTicketsField({
 
       {modalOpen && (
         <PickItemModal
-          options={options}
+          options={visibleOptions}
           selectedIds={selected}
           columns={1}
           onToggle={toggle}

@@ -4,10 +4,14 @@ import { MovieCard, type MovieCardData } from "@/components/movie-card";
 import { MovieRow } from "@/components/movie-row";
 import { HeroCarousel, type HeroMovie } from "@/components/hero-carousel";
 import { CategoryPills } from "@/components/category-pills";
+import { SiteDayStrip } from "@/components/site-day-strip";
+import { SiteLocationSelect } from "@/components/site-location-select";
+import { ShowtimesBoard, type ShowtimeMovie } from "@/components/showtimes-board";
 import { Input } from "@/components/ui/input";
 import { withRatings } from "@/lib/ratings";
 import { nowShowingWhere } from "@/lib/movie-availability";
 import { getSelectedLocationId } from "@/lib/location-session";
+import { seatPrice } from "@/lib/booking";
 import type { Movie } from "@prisma/client";
 
 export const metadata: Metadata = {
@@ -15,19 +19,67 @@ export const metadata: Metadata = {
   description: "Browse now showing and coming soon movies at OJAJA Cinemas.",
 };
 
+function startOfDay(offset: number) {
+  const d = new Date();
+  d.setDate(d.getDate() + offset);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function startOfDayFromDateString(dateStr: string) {
+  const d = new Date(`${dateStr}T00:00:00`);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function ordinalSuffix(n: number) {
+  if (n % 10 === 1 && n % 100 !== 11) return "st";
+  if (n % 10 === 2 && n % 100 !== 12) return "nd";
+  if (n % 10 === 3 && n % 100 !== 13) return "rd";
+  return "th";
+}
+
+function dayStripLabel(d: Date) {
+  const month = d.toLocaleDateString("en-NG", { month: "short" }).toUpperCase();
+  return `${month} ${d.getDate()}${ordinalSuffix(d.getDate())}`;
+}
+
 export default async function MoviesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; q?: string; genre?: string }>;
+  searchParams: Promise<{ status?: string; q?: string; genre?: string; day?: string; date?: string; location?: string }>;
 }) {
-  const { status, q, genre } = await searchParams;
+  const { status, q, genre, day, date, location } = await searchParams;
   const isBrowsing = !status && !q && !genre;
-  const locationId = await getSelectedLocationId();
 
-  const [nowShowingRaw, comingSoonRaw] = await Promise.all([
-    prisma.movie.findMany({ where: nowShowingWhere(locationId), orderBy: { releaseDate: "desc" } }),
+  // No explicit choice yet (first visit) — default to the guest's selected cinema.
+  // An explicit empty string means they deliberately picked "All Cinemas".
+  const locationId = location === undefined ? await getSelectedLocationId() : location || null;
+
+  const dayRange = date
+    ? { gte: startOfDayFromDateString(date), lt: new Date(startOfDayFromDateString(date).getTime() + 24 * 60 * 60 * 1000) }
+    : { gte: startOfDay(Number(day ?? 0)), lt: startOfDay(Number(day ?? 0) + 1) };
+
+  const [nowShowingRaw, comingSoonRaw, branches] = await Promise.all([
+    prisma.movie.findMany({ where: nowShowingWhere(locationId, dayRange), orderBy: { releaseDate: "desc" } }),
     prisma.movie.findMany({ where: { status: "COMING_SOON" }, orderBy: { releaseDate: "asc" } }),
+    prisma.branch.findMany({ orderBy: { name: "asc" } }),
   ]);
+
+  const dayShowtimes =
+    status !== "coming-soon" && nowShowingRaw.length > 0
+      ? await prisma.showtime.findMany({
+          where: {
+            movieId: { in: nowShowingRaw.map((m) => m.id) },
+            startTime: dayRange,
+            status: "OPEN",
+            salesOnWeb: true,
+            ...(locationId ? { auditorium: { branchId: locationId } } : {}),
+          },
+          include: { movie: true, auditorium: { include: { branch: true } } },
+          orderBy: { startTime: "asc" },
+        })
+      : [];
 
   const availableMovies = [...nowShowingRaw, ...comingSoonRaw];
 
@@ -72,6 +124,52 @@ export default async function MoviesPage({
     reviewCount: m.reviewCount,
   }));
 
+  const byMovieShowtimes = new Map<string, typeof dayShowtimes>();
+  for (const st of dayShowtimes) {
+    const list = byMovieShowtimes.get(st.movie.id) ?? [];
+    list.push(st);
+    byMovieShowtimes.set(st.movie.id, list);
+  }
+  const ratedForShowtimes = await withRatings(nowShowingRaw.filter((m) => byMovieShowtimes.has(m.id)));
+  const ratingForShowtimesById = new Map(ratedForShowtimes.map((m) => [m.id, m]));
+
+  const boardMovies: ShowtimeMovie[] = Array.from(byMovieShowtimes.entries()).map(([movieId, list]) => {
+    const m = list[0].movie;
+    const rated = ratingForShowtimesById.get(movieId);
+    const byBranch = list.reduce<Record<string, typeof list>>((acc, st) => {
+      const key = st.auditorium.branch.name;
+      (acc[key] ??= []).push(st);
+      return acc;
+    }, {});
+
+    return {
+      id: m.id,
+      slug: m.slug,
+      title: m.title,
+      posterUrl: m.posterUrl,
+      backdropUrl: m.backdropUrl,
+      runtimeMins: m.runtimeMins,
+      genres: m.genres,
+      classification: m.classification,
+      cast: m.cast
+        .split(",")
+        .map((c) => c.trim())
+        .filter(Boolean),
+      rating: rated?.rating ?? null,
+      reviewCount: rated?.reviewCount ?? 0,
+      byBranch: Object.entries(byBranch).map(([branchName, sts]) => ({
+        branchName,
+        sessions: sts.map((st) => ({
+          id: st.id,
+          startTime: st.startTime.toISOString(),
+          auditoriumName: st.auditorium.name,
+          format: st.format,
+          price: seatPrice(st.basePrice, "STANDARD"),
+        })),
+      })),
+    };
+  });
+
   const byGenreRow = new Map<string, MovieCardData[]>();
   if (isBrowsing) {
     for (const movie of movies) {
@@ -90,6 +188,30 @@ export default async function MoviesPage({
   const shownInRows = new Set(genreRows.flatMap(([, list]) => list.map((m) => m.slug)));
   const leftoverMovies = isBrowsing ? movies.filter((m) => !shownInRows.has(m.slug)) : [];
 
+  function buildHref(params: Record<string, string | undefined>) {
+    const sp = new URLSearchParams();
+    // undefined means "omit" (let the next page fall back to its own default, e.g. the
+    // location cookie); an explicit empty string (e.g. "All Cinemas") is preserved as-is.
+    for (const [k, v] of Object.entries(params)) if (v !== undefined) sp.set(k, v);
+    const qs = sp.toString();
+    return qs ? `/movies?${qs}` : "/movies";
+  }
+
+  const activeDayOffset = date ? -1 : Number(day ?? 0);
+  const dayOptions = Array.from({ length: 7 }, (_, i) => ({
+    key: String(i),
+    label: dayStripLabel(startOfDay(i)),
+    href: buildHref({ status, q, genre, location, day: String(i) }),
+    active: activeDayOffset === i,
+  }));
+
+  const selectedDayLabel =
+    activeDayOffset === 0
+      ? "today"
+      : activeDayOffset === 1
+        ? "tomorrow"
+        : `on ${dayRange.gte.toLocaleDateString("en-NG", { weekday: "long", month: "long", day: "numeric" })}`;
+
   return (
     <div className="pb-8">
       {isBrowsing && heroMovies.length > 0 && <HeroCarousel movies={heroMovies} />}
@@ -103,14 +225,37 @@ export default async function MoviesPage({
         <form className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center" method="get">
           <Input type="search" name="q" defaultValue={q ?? ""} placeholder="Search by title, genre, or actor..." className="sm:max-w-sm" />
           <div className="flex gap-2 text-sm">
-            <FilterLink href="/movies" active={!status} label="All" />
-            <FilterLink href="/movies?status=now-showing" active={status === "now-showing"} label="Now Showing" />
-            <FilterLink href="/movies?status=coming-soon" active={status === "coming-soon"} label="Coming Soon" />
+            <FilterLink href={buildHref({ q, genre, location, day, date })} active={!status} label="All" />
+            <FilterLink href={buildHref({ status: "now-showing", q, genre, location, day, date })} active={status === "now-showing"} label="Now Showing" />
+            <FilterLink href={buildHref({ status: "coming-soon", q, genre, location })} active={status === "coming-soon"} label="Coming Soon" />
           </div>
         </form>
 
+        {status !== "coming-soon" && (
+          <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0 flex-1">
+              <SiteDayStrip days={dayOptions} basePath="/movies" dateActive={Boolean(date)} />
+            </div>
+            <SiteLocationSelect branches={branches.map((b) => ({ id: b.id, name: b.name }))} selected={locationId ?? ""} basePath="/movies" />
+          </div>
+        )}
+
+        {status !== "coming-soon" &&
+          (boardMovies.length > 0 ? (
+            <div className="mt-8">
+              <h2 className="text-lg font-bold tracking-tight">Book a Showtime</h2>
+              <p className="mb-1 text-sm text-muted">Pick a movie to see its sessions {locationId ? "at your cinema" : "across all cinemas"} for this day.</p>
+              <ShowtimesBoard movies={boardMovies} />
+            </div>
+          ) : (
+            <div className="mt-10 rounded-2xl border border-dashed border-border py-16 text-center">
+              <p className="text-2xl font-extrabold tracking-tight sm:text-3xl">No movies showing {selectedDayLabel} yet</p>
+              <p className="mt-2 text-sm text-muted">Try a different day{locationId ? " or cinema" : ""} using the filters above.</p>
+            </div>
+          ))}
+
         {categories.length > 0 && (
-          <div className="mt-6">
+          <div className="mt-8">
             <h2 className="mb-3 text-lg font-bold tracking-tight">Categories</h2>
             <CategoryPills categories={categories} activeGenre={genre} />
           </div>

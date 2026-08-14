@@ -29,7 +29,7 @@ export default async function MovieDetailPage({ params }: { params: Promise<{ sl
 
   const [showtimes, reviews, session] = await Promise.all([
     prisma.showtime.findMany({
-      where: { movieId: movie.id, startTime: { gte: new Date() }, status: "OPEN" },
+      where: { movieId: movie.id, startTime: { gte: new Date() }, status: "OPEN", salesOnWeb: true },
       include: { auditorium: { include: { branch: true } } },
       orderBy: { startTime: "asc" },
       take: 60,

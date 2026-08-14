@@ -8,7 +8,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const staticRoutes = [
     "",
     "/movies",
-    "/showtimes",
     "/locations",
     "/book-a-space",
     "/contact",

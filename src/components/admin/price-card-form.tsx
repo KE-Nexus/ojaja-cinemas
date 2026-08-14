@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { createPriceCardAction, updatePriceCardAction, type FormState } from "@/actions/admin/price-cards";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Select, Textarea, FieldError } from "@/components/ui/input";
@@ -21,6 +21,7 @@ export function PriceCardForm({
 }) {
   const action = priceCard ? updatePriceCardAction : createPriceCardAction;
   const [state, formAction, isPending] = useActionState<FormState, FormData>(action, null);
+  const [branchId, setBranchId] = useState(priceCard?.branchId ?? "");
 
   return (
     <form action={formAction} className="space-y-6">
@@ -41,7 +42,7 @@ export function PriceCardForm({
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
           <Label htmlFor="branchId">Cinema</Label>
-          <Select id="branchId" name="branchId" defaultValue={priceCard?.branchId} required>
+          <Select id="branchId" name="branchId" value={branchId} onChange={(e) => setBranchId(e.target.value)} required>
             <option value="">Select a cinema</option>
             {branches.map((b) => (
               <option key={b.id} value={b.id}>
@@ -78,7 +79,7 @@ export function PriceCardForm({
       </div>
 
       <div className="border-t border-border pt-6">
-        <PriceCardTicketsField options={ticketOptions} initialTicketIds={initialTicketIds} />
+        <PriceCardTicketsField options={ticketOptions} initialTicketIds={initialTicketIds} selectedBranchId={branchId} />
       </div>
 
       {state?.error && <FieldError>{state.error}</FieldError>}

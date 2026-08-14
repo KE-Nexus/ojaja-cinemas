@@ -48,6 +48,7 @@ export async function createFilmSessionsAction(_prev: SessionFormState, formData
   const startTimes = formData.getAll("row_startTime").map(String);
   const endTimes = formData.getAll("row_endTime").map(String);
   const cleanupTimes = formData.getAll("row_cleanupTimeMins").map(String);
+  const rowKeys = formData.getAll("row_key").map(String);
 
   if (auditoriumIds.length === 0) return { error: "Add at least one session." };
 
@@ -59,6 +60,8 @@ export async function createFilmSessionsAction(_prev: SessionFormState, formData
     startTime: Date;
     endTime: Date | null;
     cleanupTimeMins: number;
+    salesOnPos: boolean;
+    salesOnWeb: boolean;
   }[] = [];
 
   for (let i = 0; i < auditoriumIds.length; i++) {
@@ -72,6 +75,12 @@ export async function createFilmSessionsAction(_prev: SessionFormState, formData
       cleanupTimeMins: cleanupTimes[i] || 0,
     });
     if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Please check each session's details." };
+
+    const rowKey = rowKeys[i];
+    const salesOnPos = formData.get(`row_salesOnPos_${rowKey}`) === "true";
+    const salesOnWeb = formData.get(`row_salesOnWeb_${rowKey}`) === "true";
+    if (!salesOnPos && !salesOnWeb) return { error: "Each session must be sold on POS, Web, or both." };
+
     rows.push({
       auditoriumId: parsed.data.auditoriumId,
       priceCardId: parsed.data.priceCardId || null,
@@ -80,6 +89,8 @@ export async function createFilmSessionsAction(_prev: SessionFormState, formData
       startTime: new Date(parsed.data.startTime),
       endTime: parsed.data.endTime ? new Date(parsed.data.endTime) : null,
       cleanupTimeMins: parsed.data.cleanupTimeMins,
+      salesOnPos,
+      salesOnWeb,
     });
   }
 
@@ -117,6 +128,8 @@ export async function createFilmSessionsAction(_prev: SessionFormState, formData
           status: batchParsed.data.status,
           trailerDurationMins: row.trailerDurationMins,
           cleanupTimeMins: row.cleanupTimeMins,
+          salesOnPos: row.salesOnPos,
+          salesOnWeb: row.salesOnWeb,
         },
       });
     }
@@ -138,6 +151,85 @@ export async function deleteSessionAction(id: string) {
   await prisma.showtime.delete({ where: { id } });
   await logAdminAction(session.sub, "DELETE", "Showtime", id);
   revalidatePath("/admin/scheduling");
+}
+
+/** Editing is only ever offered in the UI for sessions that haven't started yet — this re-checks that server-side rather than trusting the client's clock. */
+export async function updateFilmSessionAction(_prev: SessionFormState, formData: FormData): Promise<SessionFormState> {
+  const session = await requireRole(["SUPERVISOR", "CIRCUIT_ADMIN"]);
+  const claimError = await assertHasClaim(session.role, "CAN_UPDATE_SHOWTIMES");
+  if (claimError) return { error: claimError };
+
+  const id = String(formData.get("id"));
+  const existing = await prisma.showtime.findUnique({ where: { id }, include: { auditorium: true } });
+  if (!existing) return { error: "Session not found." };
+  if (existing.startTime.getTime() <= Date.now()) return { error: "This session has already started and can no longer be edited." };
+
+  const accessError = await assertBranchAccess(session.sub, session.role, existing.auditorium.branchId);
+  if (accessError) return { error: accessError };
+
+  const bookingCount = await prisma.booking.count({ where: { showtimeId: id, status: { in: ["PENDING", "CONFIRMED"] } } });
+  if (bookingCount > 0) return { error: "This session already has bookings, so it can no longer be edited — cancel/refund them first if it must change." };
+
+  const movieId = String(formData.get("movieId") || "");
+  const language = String(formData.get("language") || "");
+  const status = formData.get("status") === "CLOSED" ? "CLOSED" : "OPEN";
+  if (!movieId) return { error: "Select a film." };
+
+  const parsed = filmSessionRowSchema.safeParse({
+    auditoriumId: formData.get("auditoriumId"),
+    priceCardId: formData.get("priceCardId") || "",
+    format: formData.get("format"),
+    trailerDurationMins: formData.get("trailerDurationMins") || 0,
+    startTime: formData.get("startTime"),
+    endTime: formData.get("endTime") || "",
+    cleanupTimeMins: formData.get("cleanupTimeMins") || 0,
+  });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Please check the form." };
+
+  const salesOnPos = formData.get("salesOnPos") === "true";
+  const salesOnWeb = formData.get("salesOnWeb") === "true";
+  if (!salesOnPos && !salesOnWeb) return { error: "This session must be sold on POS, Web, or both." };
+
+  const auditorium = await prisma.auditorium.findUnique({ where: { id: parsed.data.auditoriumId } });
+  if (!auditorium || auditorium.branchId !== existing.auditorium.branchId) return { error: "Choose a screen at this cinema." };
+
+  if (parsed.data.priceCardId) {
+    const priceCard = await prisma.priceCard.findUnique({ where: { id: parsed.data.priceCardId } });
+    if (!priceCard || priceCard.branchId !== existing.auditorium.branchId) return { error: "This price card doesn't belong to this cinema." };
+  }
+
+  const newStart = new Date(parsed.data.startTime);
+  if (newStart.getTime() <= Date.now()) return { error: "Choose a start time in the future." };
+
+  const conflict = await prisma.showtime.findFirst({
+    where: { auditoriumId: parsed.data.auditoriumId, startTime: newStart, id: { not: id } },
+  });
+  if (conflict) return { error: "This screen already has a session scheduled at that time." };
+
+  const basePrice = await resolveBasePrice(parsed.data.priceCardId || null);
+
+  await prisma.showtime.update({
+    where: { id },
+    data: {
+      movieId,
+      auditoriumId: parsed.data.auditoriumId,
+      priceCardId: parsed.data.priceCardId || null,
+      startTime: newStart,
+      endTime: parsed.data.endTime ? new Date(parsed.data.endTime) : null,
+      basePrice,
+      language,
+      format: parsed.data.format,
+      status,
+      trailerDurationMins: parsed.data.trailerDurationMins,
+      cleanupTimeMins: parsed.data.cleanupTimeMins,
+      salesOnPos,
+      salesOnWeb,
+    },
+  });
+
+  await logAdminAction(session.sub, "UPDATE", "Showtime", id);
+  revalidatePath("/admin/scheduling");
+  return { success: true };
 }
 
 export async function deleteDaySessionsAction(auditoriumIds: string[], dayStart: string, dayEnd: string) {
@@ -186,6 +278,8 @@ export async function duplicateDayAction(auditoriumIds: string[], fromDayStart: 
         basePrice: s.basePrice,
         language: s.language,
         format: s.format,
+        salesOnPos: s.salesOnPos,
+        salesOnWeb: s.salesOnWeb,
       },
     });
     created++;
@@ -267,6 +361,8 @@ export async function duplicateAcrossCircuitAction(
         status: s.status,
         trailerDurationMins: s.trailerDurationMins,
         cleanupTimeMins: s.cleanupTimeMins,
+        salesOnPos: s.salesOnPos,
+        salesOnWeb: s.salesOnWeb,
       },
     });
     created++;

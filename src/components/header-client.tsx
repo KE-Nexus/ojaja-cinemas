@@ -17,7 +17,6 @@ import {
   Search,
   Home,
   Film,
-  CalendarClock,
   PartyPopper,
   Mail,
 } from "lucide-react";
@@ -30,7 +29,6 @@ import { ThemeToggle } from "@/components/theme-toggle";
 const NAV_LINKS = [
   { href: "/", label: "Home", icon: Home, exact: true },
   { href: "/movies", label: "Movies", icon: Film },
-  { href: "/showtimes", label: "Showtimes", icon: CalendarClock },
   { href: "/locations", label: "Locations", icon: MapPin },
   { href: "/book-a-space", label: "Book a Space", icon: PartyPopper },
   { href: "/contact", label: "Contact", icon: Mail },

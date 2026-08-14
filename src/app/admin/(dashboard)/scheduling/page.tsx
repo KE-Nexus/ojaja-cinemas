@@ -3,7 +3,8 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { SchedulingDayView, type ScheduleRoom } from "@/components/admin/scheduling-day-view";
 import { SchedulingToolbar } from "@/components/admin/scheduling-toolbar";
-import { CreateFilmSessionsModal } from "@/components/admin/create-film-sessions-modal";
+import { SchedulingProvider } from "@/components/admin/scheduling-provider";
+import { CreateSessionButton } from "@/components/admin/create-session-button";
 import { BranchSelectForm } from "@/components/admin/branch-select-form";
 import { getBranchScope, resolveScopedBranchId } from "@/lib/branch-scope";
 
@@ -75,10 +76,18 @@ export default async function SchedulingPage({
         id: st.id,
         movieId: st.movieId,
         movieTitle: st.movie.title,
+        auditoriumId: st.auditoriumId,
+        priceCardId: st.priceCardId,
         language: st.language,
         format: st.format,
         startTime: st.startTime.toISOString(),
+        endTime: st.endTime ? st.endTime.toISOString() : null,
         runtimeMins: st.movie.runtimeMins,
+        trailerDurationMins: st.trailerDurationMins,
+        cleanupTimeMins: st.cleanupTimeMins,
+        status: st.status,
+        salesOnPos: st.salesOnPos,
+        salesOnWeb: st.salesOnWeb,
         bookedSeats: st.bookings
           .filter((b) => b.status === "PENDING" || b.status === "CONFIRMED")
           .reduce((sum, b) => sum + b.seats.length, 0),
@@ -105,46 +114,48 @@ export default async function SchedulingPage({
         <BranchSelectForm branches={branches} selectedBranchId={selectedBranch?.id} dateParam={dateParam} locked={!scope.isCircuitAdmin} />
       </div>
 
-      <div className="mb-4 flex flex-wrap items-center gap-3">
-        <CreateFilmSessionsModal
-          movies={movies.map((m) => ({ id: m.id, title: m.title }))}
-          rooms={auditoriums.map((a) => ({ id: a.id, name: a.name }))}
-          priceCards={priceCards.map((p) => ({ id: p.id, name: p.name }))}
-          branches={branches.map((b) => ({ id: b.id, name: b.name }))}
-          defaultBranchId={selectedBranch?.id}
-          defaultDate={`${dateParam}T12:00`}
-        />
-        <SchedulingToolbar
-          rooms={rooms}
-          auditoriumIds={auditoriums.map((a) => a.id)}
-          dayStartISO={today.toISOString()}
-          dayEndISO={tomorrow.toISOString()}
-          branches={branches.map((b) => ({ id: b.id, name: b.name }))}
-          currentBranchId={selectedBranch?.id}
-          isCircuitAdmin={scope.isCircuitAdmin}
-        />
-      </div>
+      <SchedulingProvider
+        movies={movies.map((m) => ({ id: m.id, title: m.title, runtimeMins: m.runtimeMins }))}
+        rooms={auditoriums.map((a) => ({ id: a.id, name: a.name }))}
+        priceCards={priceCards.map((p) => ({ id: p.id, name: p.name }))}
+        branches={branches.map((b) => ({ id: b.id, name: b.name }))}
+        defaultBranchId={selectedBranch?.id}
+        defaultDate={`${dateParam}T12:00`}
+      >
+        <div className="mb-4 flex flex-wrap items-center gap-3">
+          <CreateSessionButton />
+          <SchedulingToolbar
+            rooms={rooms}
+            auditoriumIds={auditoriums.map((a) => a.id)}
+            dayStartISO={today.toISOString()}
+            dayEndISO={tomorrow.toISOString()}
+            branches={branches.map((b) => ({ id: b.id, name: b.name }))}
+            currentBranchId={selectedBranch?.id}
+            isCircuitAdmin={scope.isCircuitAdmin}
+          />
+        </div>
 
-      <div className="mb-4 flex items-center gap-3">
-        <Link href={buildHref({ date: toDateInputValue(prevDay) })} className="flex h-8 w-8 items-center justify-center rounded-lg border border-border hover:border-brand/50">
-          <ChevronLeft size={16} />
-        </Link>
-        <span className="text-sm font-medium">
-          {today.toLocaleDateString("en-NG", { weekday: "short", day: "2-digit", month: "short", year: "numeric" })}
-        </span>
-        <Link href={buildHref({ date: toDateInputValue(nextDay) })} className="flex h-8 w-8 items-center justify-center rounded-lg border border-border hover:border-brand/50">
-          <ChevronRight size={16} />
-        </Link>
-        <Link href={buildHref({ date: toDateInputValue(new Date()) })} className="text-sm text-brand-light hover:underline">
-          Today
-        </Link>
-      </div>
+        <div className="mb-4 flex items-center gap-3">
+          <Link href={buildHref({ date: toDateInputValue(prevDay) })} className="flex h-8 w-8 items-center justify-center rounded-lg border border-border hover:border-brand/50">
+            <ChevronLeft size={16} />
+          </Link>
+          <span className="text-sm font-medium">
+            {today.toLocaleDateString("en-NG", { weekday: "short", day: "2-digit", month: "short", year: "numeric" })}
+          </span>
+          <Link href={buildHref({ date: toDateInputValue(nextDay) })} className="flex h-8 w-8 items-center justify-center rounded-lg border border-border hover:border-brand/50">
+            <ChevronRight size={16} />
+          </Link>
+          <Link href={buildHref({ date: toDateInputValue(new Date()) })} className="text-sm text-brand-light hover:underline">
+            Today
+          </Link>
+        </div>
 
-      {!selectedBranch ? (
-        <p className="text-muted">No branches configured.</p>
-      ) : (
-        <SchedulingDayView rooms={rooms} />
-      )}
+        {!selectedBranch ? (
+          <p className="text-muted">No branches configured.</p>
+        ) : (
+          <SchedulingDayView rooms={rooms} dayStartISO={today.toISOString()} />
+        )}
+      </SchedulingProvider>
     </div>
   );
 }

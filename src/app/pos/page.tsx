@@ -42,7 +42,7 @@ export default async function PosPage() {
 
   const [showtimes, ticketClasses, items] = await Promise.all([
     prisma.showtime.findMany({
-      where: { auditorium: { branchId: me.branchId }, startTime: { gte: todayStart, lt: todayEnd }, status: "OPEN" },
+      where: { auditorium: { branchId: me.branchId }, startTime: { gte: todayStart, lt: todayEnd }, status: "OPEN", salesOnPos: true },
       include: { movie: true, auditorium: true },
       orderBy: { startTime: "asc" },
     }),

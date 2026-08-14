@@ -1,17 +1,35 @@
 "use client";
 
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { X, Trash2 } from "lucide-react";
+import { X, Trash2, Pencil } from "lucide-react";
 import { deleteSessionAction } from "@/actions/admin/scheduling";
 import { Button } from "@/components/ui/button";
 import { formatDate, formatTime } from "@/lib/format";
+import { useSchedulingActions } from "@/components/admin/scheduling-provider";
+import { EditSessionModal } from "@/components/admin/edit-session-modal";
 import type { ScheduleSession } from "@/components/admin/scheduling-day-view";
 
 export function SessionDetailModal({ session, onClose }: { session: ScheduleSession; onClose: () => void }) {
   const [isPending, startTransition] = useTransition();
+  const [editing, setEditing] = useState(false);
+  const { movies, rooms, priceCards } = useSchedulingActions();
   const start = new Date(session.startTime);
   const end = new Date(start.getTime() + session.runtimeMins * 60000);
+  const [canEdit] = useState(() => start.getTime() > Date.now());
+
+  if (editing) {
+    return (
+      <EditSessionModal
+        session={session}
+        movies={movies}
+        rooms={rooms}
+        priceCards={priceCards}
+        onClose={() => setEditing(false)}
+        onSaved={onClose}
+      />
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
@@ -51,26 +69,37 @@ export function SessionDetailModal({ session, onClose }: { session: ScheduleSess
           </div>
         </dl>
 
-        <Button
-          variant="danger"
-          size="sm"
-          className="mt-5 w-full"
-          disabled={isPending}
-          onClick={() => {
-            if (!confirm(`Delete this session for "${session.movieTitle}"?`)) return;
-            startTransition(async () => {
-              try {
-                await deleteSessionAction(session.id);
-                toast.success("Session deleted.");
-                onClose();
-              } catch {
-                toast.error("Failed to delete session — it may already have bookings.");
-              }
-            });
-          }}
-        >
-          <Trash2 size={14} /> {isPending ? "Deleting..." : "Delete Session"}
-        </Button>
+        {!canEdit && (
+          <p className="mt-4 text-xs text-muted">This session has already started, so it can no longer be edited.</p>
+        )}
+
+        <div className="mt-5 flex gap-2">
+          {canEdit && (
+            <Button size="sm" className="flex-1" onClick={() => setEditing(true)}>
+              <Pencil size={14} /> Edit Session
+            </Button>
+          )}
+          <Button
+            variant="danger"
+            size="sm"
+            className="flex-1"
+            disabled={isPending}
+            onClick={() => {
+              if (!confirm(`Delete this session for "${session.movieTitle}"?`)) return;
+              startTransition(async () => {
+                try {
+                  await deleteSessionAction(session.id);
+                  toast.success("Session deleted.");
+                  onClose();
+                } catch {
+                  toast.error("Failed to delete session — it may already have bookings.");
+                }
+              });
+            }}
+          >
+            <Trash2 size={14} /> {isPending ? "Deleting..." : "Delete Session"}
+          </Button>
+        </div>
       </div>
     </div>
   );

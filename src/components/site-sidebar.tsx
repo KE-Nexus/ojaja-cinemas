@@ -3,14 +3,12 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { Home, Film, CalendarClock, MapPin, PartyPopper, Mail } from "lucide-react";
+import { Home, Film, PartyPopper, Mail } from "lucide-react";
 import { cn } from "@/lib/cn";
 
 const NAV_ITEMS = [
   { href: "/", label: "Home", icon: Home, exact: true },
   { href: "/movies", label: "Movies", icon: Film },
-  { href: "/showtimes", label: "Showtimes", icon: CalendarClock },
-  { href: "/locations", label: "Locations", icon: MapPin },
   { href: "/book-a-space", label: "Book a Space", icon: PartyPopper },
   { href: "/contact", label: "Contact", icon: Mail },
 ];

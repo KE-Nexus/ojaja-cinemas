@@ -23,7 +23,6 @@ export function SiteFooter() {
             <h4 className="mb-3 text-sm font-semibold">Explore</h4>
             <ul className="space-y-2 text-sm text-muted">
               <li><Link href="/movies" className="hover:text-brand-light">Now Showing</Link></li>
-              <li><Link href="/showtimes" className="hover:text-brand-light">Showtimes</Link></li>
               <li><Link href="/locations" className="hover:text-brand-light">Locations</Link></li>
               <li><Link href="/book-a-space" className="hover:text-brand-light">Book a Space</Link></li>
               <li><Link href="/house-rules" className="hover:text-brand-light">House Rules</Link></li>

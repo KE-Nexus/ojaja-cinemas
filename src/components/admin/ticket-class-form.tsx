@@ -4,7 +4,7 @@ import { useActionState, useState } from "react";
 import { createTicketClassAction, updateTicketClassAction, type FormState } from "@/actions/admin/ticket-classes";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Select, FieldError } from "@/components/ui/input";
-import { TicketBundleLinesField, ItemBundleLinesField, type TicketLineOption } from "@/components/admin/ticket-package-lines-field";
+import { TicketBundleLinesField, ItemBundleLinesField, type TicketLineOption, type SelectedLine } from "@/components/admin/ticket-package-lines-field";
 import { SALES_SOURCES } from "@/lib/ticket-sources";
 import type { TicketClass, TicketClassKind } from "@prisma/client";
 
@@ -27,6 +27,21 @@ export function TicketClassForm({
   const action = ticket ? updateTicketClassAction : createTicketClassAction;
   const [state, formAction, isPending] = useActionState<FormState, FormData>(action, null);
   const [kind, setKind] = useState<TicketClassKind>(ticket?.kind ?? "STANDARD");
+  const [manualPrice, setManualPrice] = useState(String(ticket?.defaultPrice ?? ""));
+  const [packageTicketLines, setPackageTicketLines] = useState<SelectedLine[]>(
+    ticket?.packageTicketLines.map((l) => ({ id: l.ticketClassId, quantity: l.quantity })) ?? []
+  );
+  const [packageItemLines, setPackageItemLines] = useState<SelectedLine[]>(
+    ticket?.packageItemLines.map((l) => ({ id: l.posItemId, quantity: l.quantity })) ?? []
+  );
+
+  const ticketPriceById = new Map(standardTicketOptions.map((o) => [o.id, o.defaultPrice]));
+  const itemPriceById = new Map(itemOptions.map((o) => [o.id, o.defaultPrice]));
+  const packageTotal =
+    packageTicketLines.reduce((sum, l) => sum + (ticketPriceById.get(l.id) ?? 0) * l.quantity, 0) +
+    packageItemLines.reduce((sum, l) => sum + (itemPriceById.get(l.id) ?? 0) * l.quantity, 0);
+  const isPackage = kind === "PACKAGE";
+  const priceValue = isPackage ? String(packageTotal) : manualPrice;
 
   return (
     <form action={formAction} className="space-y-6">
@@ -82,7 +97,19 @@ export function TicketClassForm({
         </div>
         <div>
           <Label htmlFor="defaultPrice">Price</Label>
-          <Input id="defaultPrice" name="defaultPrice" type="number" min={0} step="0.01" defaultValue={ticket?.defaultPrice} required />
+          <Input
+            id="defaultPrice"
+            name="defaultPrice"
+            type="number"
+            min={0}
+            step="0.01"
+            value={priceValue}
+            onChange={(e) => setManualPrice(e.currentTarget.value)}
+            readOnly={isPackage}
+            className={isPackage ? "cursor-not-allowed opacity-70" : undefined}
+            required
+          />
+          {isPackage && <p className="mt-1 text-xs text-muted">Auto-calculated from the included tickets and items below.</p>}
         </div>
       </div>
 
@@ -168,11 +195,13 @@ export function TicketClassForm({
         <div className="space-y-4">
           <TicketBundleLinesField
             options={standardTicketOptions}
-            initialLines={ticket?.packageTicketLines.map((l) => ({ id: l.ticketClassId, quantity: l.quantity })) ?? []}
+            initialLines={packageTicketLines}
+            onChange={setPackageTicketLines}
           />
           <ItemBundleLinesField
             options={itemOptions}
-            initialLines={ticket?.packageItemLines.map((l) => ({ id: l.posItemId, quantity: l.quantity })) ?? []}
+            initialLines={packageItemLines}
+            onChange={setPackageItemLines}
           />
         </div>
       )}
