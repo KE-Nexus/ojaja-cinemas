@@ -1,8 +1,8 @@
 "use client";
 
-import { useActionState, useMemo, useState } from "react";
+import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Minus, Plus, Tag } from "lucide-react";
+import { Minus, Plus, Tag, Pencil } from "lucide-react";
 import { CountdownTimer } from "@/components/countdown-timer";
 import { Button } from "@/components/ui/button";
 import { Input, Label, FieldError } from "@/components/ui/input";
@@ -12,6 +12,60 @@ import type { SeatCategory } from "@prisma/client";
 
 type LockedSeat = { id: string; row: string; number: number; category: SeatCategory; price: number };
 type Concession = { id: string; name: string; description: string | null; price: number };
+type GuestDetails = { name: string; email: string; phone: string };
+
+function GuestDetailsModal({
+  initial,
+  onContinue,
+  onClose,
+}: {
+  initial: GuestDetails;
+  onContinue: (details: GuestDetails) => void;
+  onClose: () => void;
+}) {
+  const [name, setName] = useState(initial.name);
+  const [email, setEmail] = useState(initial.email);
+  const [phone, setPhone] = useState(initial.phone);
+  const [error, setError] = useState<string | null>(null);
+
+  function submit() {
+    if (!name.trim() || !email.trim() || !phone.trim()) {
+      setError("Please fill in your name, email, and phone number.");
+      return;
+    }
+    onContinue({ name: name.trim(), email: email.trim(), phone: phone.trim() });
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
+      <div className="w-full max-w-sm rounded-2xl border border-border bg-surface p-5" onClick={(e) => e.stopPropagation()}>
+        <h3 className="mb-1 font-semibold">Your Details</h3>
+        <p className="mb-4 text-sm text-muted">We&rsquo;ll use this to send your e-ticket and booking confirmation.</p>
+
+        <div className="space-y-3">
+          <div>
+            <Label htmlFor="modalGuestName">Full name</Label>
+            <Input id="modalGuestName" value={name} onChange={(e) => setName(e.target.value)} autoComplete="off" autoFocus />
+          </div>
+          <div>
+            <Label htmlFor="modalGuestEmail">Email</Label>
+            <Input id="modalGuestEmail" type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="off" />
+          </div>
+          <div>
+            <Label htmlFor="modalGuestPhone">Phone number</Label>
+            <Input id="modalGuestPhone" value={phone} onChange={(e) => setPhone(e.target.value)} autoComplete="off" />
+          </div>
+        </div>
+
+        {error && <FieldError>{error}</FieldError>}
+
+        <Button type="button" className="mt-4 w-full" onClick={submit}>
+          Continue to Payment
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 export function CheckoutClient({
   showtimeId,
@@ -29,9 +83,13 @@ export function CheckoutClient({
   isLoggedIn: boolean;
 }) {
   const router = useRouter();
+  const formRef = useRef<HTMLFormElement>(null);
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [promoCode, setPromoCode] = useState("");
   const [promoStatus, setPromoStatus] = useState<{ discount?: number; error?: string; checking?: boolean } | null>(null);
+  const [guestDetails, setGuestDetails] = useState<GuestDetails>({ name: "", email: "", phone: "" });
+  const [showGuestModal, setShowGuestModal] = useState(false);
+  const autoSubmitRef = useRef(false);
   const [state, formAction, isPending] = useActionState<FormState, FormData>(createPendingBookingAction, null);
 
   const seatSubtotal = seats.reduce((sum, s) => sum + s.price, 0);
@@ -42,6 +100,7 @@ export function CheckoutClient({
   const subtotal = seatSubtotal + concessionSubtotal;
   const discount = promoStatus?.discount ?? 0;
   const total = Math.max(0, subtotal - discount);
+  const hasGuestDetails = Boolean(guestDetails.name && guestDetails.email && guestDetails.phone);
 
   function setQty(id: string, delta: number) {
     setQuantities((prev) => {
@@ -70,6 +129,29 @@ export function CheckoutClient({
   const concessionPayload = concessions
     .map((c) => ({ id: c.id, quantity: quantities[c.id] ?? 0 }))
     .filter((c) => c.quantity > 0);
+
+  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    if (!isLoggedIn && !hasGuestDetails) {
+      e.preventDefault();
+      setShowGuestModal(true);
+    }
+  }
+
+  function handleGuestContinue(details: GuestDetails) {
+    setGuestDetails(details);
+    setShowGuestModal(false);
+    // guestDetails hasn't re-rendered into the hidden inputs yet on this tick, so
+    // requestSubmit() here would still submit stale (empty) values — defer the actual
+    // submit to an effect that fires once the new details have made it into the DOM.
+    autoSubmitRef.current = true;
+  }
+
+  useEffect(() => {
+    if (autoSubmitRef.current && hasGuestDetails) {
+      autoSubmitRef.current = false;
+      formRef.current?.requestSubmit();
+    }
+  }, [hasGuestDetails]);
 
   return (
     <div className="grid gap-8 lg:grid-cols-[1fr_360px]">
@@ -144,29 +226,29 @@ export function CheckoutClient({
           )}
         </section>
 
-        {!isLoggedIn && (
-          <section className="rounded-xl border border-border bg-surface p-5">
-            <h3 className="mb-3 font-semibold">Your Details</h3>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div>
-                <Label htmlFor="guestName">Full name</Label>
-                <Input id="guestName" name="guestName" required />
-              </div>
-              <div>
-                <Label htmlFor="guestEmail">Email</Label>
-                <Input id="guestEmail" name="guestEmail" type="email" required />
-              </div>
-              <div className="sm:col-span-2">
-                <Label htmlFor="guestPhone">Phone number</Label>
-                <Input id="guestPhone" name="guestPhone" required />
-              </div>
+        {!isLoggedIn && hasGuestDetails && (
+          <section className="flex items-center justify-between rounded-xl border border-border bg-surface p-5">
+            <div>
+              <h3 className="font-semibold">Your Details</h3>
+              <p className="text-sm text-muted">
+                {guestDetails.name} · {guestDetails.email} · {guestDetails.phone}
+              </p>
             </div>
+            <button
+              type="button"
+              onClick={() => setShowGuestModal(true)}
+              className="flex items-center gap-1.5 text-sm text-brand-light hover:underline"
+            >
+              <Pencil size={14} /> Edit
+            </button>
           </section>
         )}
       </div>
 
       <form
+        ref={formRef}
         action={formAction}
+        onSubmit={handleSubmit}
         className="h-fit space-y-4 rounded-2xl border border-border bg-surface p-5 lg:sticky lg:top-24"
       >
         <input type="hidden" name="showtimeId" value={showtimeId} />
@@ -176,6 +258,13 @@ export function CheckoutClient({
         ))}
         <input type="hidden" name="concessions" value={JSON.stringify(concessionPayload)} />
         <input type="hidden" name="promoCode" value={promoStatus?.discount !== undefined ? promoCode : ""} />
+        {!isLoggedIn && (
+          <>
+            <input type="hidden" name="guestName" value={guestDetails.name} />
+            <input type="hidden" name="guestEmail" value={guestDetails.email} />
+            <input type="hidden" name="guestPhone" value={guestDetails.phone} />
+          </>
+        )}
 
         <h3 className="font-semibold">Order Summary</h3>
         <div className="space-y-1.5 text-sm">
@@ -208,6 +297,10 @@ export function CheckoutClient({
         </Button>
         <p className="text-center text-xs text-muted">You won&rsquo;t be charged until you confirm payment.</p>
       </form>
+
+      {showGuestModal && (
+        <GuestDetailsModal initial={guestDetails} onContinue={handleGuestContinue} onClose={() => setShowGuestModal(false)} />
+      )}
     </div>
   );
 }

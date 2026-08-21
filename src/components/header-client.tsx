@@ -11,7 +11,6 @@ import {
   User,
   ChevronDown,
   LogOut,
-  LayoutDashboard,
   Ticket,
   MapPin,
   Search,
@@ -22,7 +21,7 @@ import {
 } from "lucide-react";
 import { logoutAction } from "@/actions/auth";
 import { clearLocationAction } from "@/actions/location";
-import { isStaffRole, type SessionPayload } from "@/lib/roles";
+import type { SessionPayload } from "@/lib/roles";
 import { cn } from "@/lib/cn";
 import { ThemeToggle } from "@/components/theme-toggle";
 
@@ -115,15 +114,6 @@ export function HeaderClient({ session, cityName }: { session: SessionPayload | 
                     >
                       <Ticket size={15} /> My Bookings
                     </Link>
-                    {isStaffRole(session.role) && (
-                      <Link
-                        href="/admin"
-                        className="flex items-center gap-2 px-4 py-2.5 text-sm hover:bg-white/5"
-                        onClick={() => setMenuOpen(false)}
-                      >
-                        <LayoutDashboard size={15} /> Admin Portal
-                      </Link>
-                    )}
                     <form action={logoutAction}>
                       <button
                         type="submit"
@@ -199,11 +189,6 @@ export function HeaderClient({ session, cityName }: { session: SessionPayload | 
                   <Link href="/account" className="rounded-lg px-3 py-2.5 text-sm font-medium hover:bg-white/5">
                     My Bookings
                   </Link>
-                  {isStaffRole(session.role) && (
-                    <Link href="/admin" className="rounded-lg px-3 py-2.5 text-sm font-medium hover:bg-white/5">
-                      Admin Portal
-                    </Link>
-                  )}
                   <form action={logoutAction}>
                     <button type="submit" className="w-full rounded-lg px-3 py-2.5 text-left text-sm text-danger hover:bg-white/5">
                       Sign out

@@ -173,6 +173,15 @@ export async function updateMovieAction(_prev: FormState, formData: FormData): P
 
 export async function deleteMovieAction(id: string) {
   const session = await requireRole(["SUPERVISOR", "CIRCUIT_ADMIN"]);
+
+  // Deleting a movie cascades to its showtimes, but a showtime with real bookings against
+  // it can't be deleted (bookings are never cascade-deleted) — this would otherwise surface
+  // as a raw foreign-key-constraint error. Catch it upfront with an actionable message.
+  const bookingCount = await prisma.booking.count({ where: { showtime: { movieId: id } } });
+  if (bookingCount > 0) {
+    throw new Error("This movie has bookings against it and can't be deleted — set its status to Archived instead to hide it without losing booking history.");
+  }
+
   await prisma.movie.delete({ where: { id } });
   await logAdminAction(session.sub, "DELETE", "Movie", id);
   revalidatePath("/admin/movies");

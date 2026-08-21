@@ -1,17 +1,16 @@
 import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
-import { MovieCard, type MovieCardData } from "@/components/movie-card";
-import { MovieRow } from "@/components/movie-row";
+import { type MovieCardData } from "@/components/movie-card";
+import { MovieDetailCard, type MovieShowtimeHint } from "@/components/movie-detail-card";
 import { HeroCarousel, type HeroMovie } from "@/components/hero-carousel";
 import { CategoryPills } from "@/components/category-pills";
 import { SiteDayStrip } from "@/components/site-day-strip";
 import { SiteLocationSelect } from "@/components/site-location-select";
-import { ShowtimesBoard, type ShowtimeMovie } from "@/components/showtimes-board";
 import { Input } from "@/components/ui/input";
 import { withRatings } from "@/lib/ratings";
-import { nowShowingWhere } from "@/lib/movie-availability";
+import { nowShowingWhere, comingSoonWhere } from "@/lib/movie-availability";
 import { getSelectedLocationId } from "@/lib/location-session";
-import { seatPrice } from "@/lib/booking";
+import { formatTime } from "@/lib/format";
 import type { Movie } from "@prisma/client";
 
 export const metadata: Metadata = {
@@ -62,7 +61,7 @@ export default async function MoviesPage({
 
   const [nowShowingRaw, comingSoonRaw, branches] = await Promise.all([
     prisma.movie.findMany({ where: nowShowingWhere(locationId, dayRange), orderBy: { releaseDate: "desc" } }),
-    prisma.movie.findMany({ where: { status: "COMING_SOON" }, orderBy: { releaseDate: "asc" } }),
+    prisma.movie.findMany({ where: comingSoonWhere(locationId), orderBy: { releaseDate: "asc" } }),
     prisma.branch.findMany({ orderBy: { name: "asc" } }),
   ]);
 
@@ -130,63 +129,22 @@ export default async function MoviesPage({
     list.push(st);
     byMovieShowtimes.set(st.movie.id, list);
   }
-  const ratedForShowtimes = await withRatings(nowShowingRaw.filter((m) => byMovieShowtimes.has(m.id)));
-  const ratingForShowtimesById = new Map(ratedForShowtimes.map((m) => [m.id, m]));
 
-  const boardMovies: ShowtimeMovie[] = Array.from(byMovieShowtimes.entries()).map(([movieId, list]) => {
-    const m = list[0].movie;
-    const rated = ratingForShowtimesById.get(movieId);
-    const byBranch = list.reduce<Record<string, typeof list>>((acc, st) => {
-      const key = st.auditorium.branch.name;
-      (acc[key] ??= []).push(st);
-      return acc;
-    }, {});
-
-    return {
-      id: m.id,
-      slug: m.slug,
-      title: m.title,
-      posterUrl: m.posterUrl,
-      backdropUrl: m.backdropUrl,
-      runtimeMins: m.runtimeMins,
-      genres: m.genres,
-      classification: m.classification,
-      cast: m.cast
-        .split(",")
-        .map((c) => c.trim())
-        .filter(Boolean),
-      rating: rated?.rating ?? null,
-      reviewCount: rated?.reviewCount ?? 0,
-      byBranch: Object.entries(byBranch).map(([branchName, sts]) => ({
-        branchName,
-        sessions: sts.map((st) => ({
-          id: st.id,
-          startTime: st.startTime.toISOString(),
-          auditoriumName: st.auditorium.name,
-          format: st.format,
-          price: seatPrice(st.basePrice, "STANDARD"),
-        })),
-      })),
-    };
-  });
-
-  const byGenreRow = new Map<string, MovieCardData[]>();
-  if (isBrowsing) {
-    for (const movie of movies) {
-      const primaryGenre = movie.genres.split(",")[0]?.trim();
-      if (!primaryGenre) continue;
-      const list = byGenreRow.get(primaryGenre) ?? [];
-      list.push(movie);
-      byGenreRow.set(primaryGenre, list);
-    }
+  // Keyed by slug (not id) so it lines up with MovieCardData, which doesn't carry the DB id.
+  const earliestShowtimeBySlug = new Map<string, MovieShowtimeHint>();
+  for (const list of byMovieShowtimes.values()) {
+    const earliest = list[0];
+    earliestShowtimeBySlug.set(earliest.movie.slug, {
+      time: formatTime(earliest.startTime),
+      label: `${earliest.auditorium.name} · ${earliest.format}`,
+      href: `/booking/${earliest.id}/seats`,
+    });
   }
-  const genreRows = Array.from(byGenreRow.entries()).filter(([, list]) => list.length >= 3);
 
-  // Movies whose primary genre didn't cluster with enough others to earn a row of its
-  // own would otherwise vanish from Browse entirely — surface them in a catch-all row
-  // instead of silently dropping titles from the page.
-  const shownInRows = new Set(genreRows.flatMap(([, list]) => list.map((m) => m.slug)));
-  const leftoverMovies = isBrowsing ? movies.filter((m) => !shownInRows.has(m.slug)) : [];
+  // Split so movies you can actually book right now don't sit interleaved with ones you
+  // can't yet (e.g. Coming Soon titles surfaced under the "All" filter).
+  const scheduledMovies = movies.filter((m) => earliestShowtimeBySlug.has(m.slug));
+  const unscheduledMovies = movies.filter((m) => !earliestShowtimeBySlug.has(m.slug));
 
   function buildHref(params: Record<string, string | undefined>) {
     const sp = new URLSearchParams();
@@ -240,19 +198,12 @@ export default async function MoviesPage({
           </div>
         )}
 
-        {status !== "coming-soon" &&
-          (boardMovies.length > 0 ? (
-            <div className="mt-8">
-              <h2 className="text-lg font-bold tracking-tight">Book a Showtime</h2>
-              <p className="mb-1 text-sm text-muted">Pick a movie to see its sessions {locationId ? "at your cinema" : "across all cinemas"} for this day.</p>
-              <ShowtimesBoard movies={boardMovies} />
-            </div>
-          ) : (
-            <div className="mt-10 rounded-2xl border border-dashed border-border py-16 text-center">
-              <p className="text-2xl font-extrabold tracking-tight sm:text-3xl">No movies showing {selectedDayLabel} yet</p>
-              <p className="mt-2 text-sm text-muted">Try a different day{locationId ? " or cinema" : ""} using the filters above.</p>
-            </div>
-          ))}
+        {status !== "coming-soon" && nowShowingRaw.length === 0 && (
+          <div className="mt-10 rounded-2xl border border-dashed border-border py-16 text-center">
+            <p className="text-2xl font-extrabold tracking-tight sm:text-3xl">No movies showing {selectedDayLabel} yet</p>
+            <p className="mt-2 text-sm text-muted">Try a different day{locationId ? " or cinema" : ""} using the filters above.</p>
+          </div>
+        )}
 
         {categories.length > 0 && (
           <div className="mt-8">
@@ -266,18 +217,29 @@ export default async function MoviesPage({
         <p className="mx-auto mt-16 max-w-7xl px-4 text-center text-muted sm:px-6 lg:px-10">
           No movies matched your search{locationId ? " at your selected cinema" : ""}.
         </p>
-      ) : isBrowsing && genreRows.length > 0 ? (
-        <div className="mt-6">
-          {genreRows.map(([genreName, list]) => (
-            <MovieRow key={genreName} title={genreName} movies={list} />
-          ))}
-          {leftoverMovies.length > 0 && <MovieRow title="More to Watch" movies={leftoverMovies} />}
-        </div>
       ) : (
-        <div className="mx-auto mt-10 max-w-7xl grid grid-cols-2 gap-x-4 gap-y-8 px-4 sm:grid-cols-3 sm:px-6 lg:grid-cols-4 lg:px-10 xl:grid-cols-5">
-          {movies.map((movie, i) => (
-            <MovieCard key={movie.slug} movie={movie} index={i} />
-          ))}
+        <div className="mx-auto mt-10 max-w-5xl px-4 sm:px-6 lg:px-10">
+          {scheduledMovies.length > 0 && (
+            <div>
+              {unscheduledMovies.length > 0 && <h2 className="mb-3 text-lg font-bold tracking-tight">Showing Now</h2>}
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                {scheduledMovies.map((movie) => (
+                  <MovieDetailCard key={movie.slug} movie={movie} showtime={earliestShowtimeBySlug.get(movie.slug) ?? null} />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {unscheduledMovies.length > 0 && (
+            <div className={scheduledMovies.length > 0 ? "mt-10" : undefined}>
+              {scheduledMovies.length > 0 && <h2 className="mb-3 text-lg font-bold tracking-tight">Coming Soon</h2>}
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                {unscheduledMovies.map((movie) => (
+                  <MovieDetailCard key={movie.slug} movie={movie} showtime={null} />
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

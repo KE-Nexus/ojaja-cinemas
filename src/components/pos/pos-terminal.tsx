@@ -24,12 +24,14 @@ import {
   Users,
   ClipboardList,
   Wifi,
+  WifiOff,
   Receipt,
 } from "lucide-react";
 import { posCheckoutAction } from "@/actions/pos/checkout";
 import { openCashDrawerAction, getShowtimesForDateAction } from "@/actions/pos/tools";
 import { logoutAction } from "@/actions/auth";
 import { formatNaira } from "@/lib/format";
+import { printPosReceipt } from "@/lib/pos-receipt";
 import { cn } from "@/lib/cn";
 import { PosModalShell } from "@/components/pos/pos-modal-shell";
 import { OthersMenu } from "@/components/pos/others-menu";
@@ -115,6 +117,9 @@ export function PosTerminal({
   const [showHeldOrders, setShowHeldOrders] = useState(false);
   const [activeModal, setActiveModal] = useState<"findItem" | "findBooking" | "userSales" | "orders" | "closeSession" | "swapTicket" | null>(null);
   const [now, setNow] = useState(() => new Date());
+  const [isOnline, setIsOnline] = useState(() => typeof navigator === "undefined" || navigator.onLine);
+  const [offlineSalesBlocked, setOfflineSalesBlocked] = useState(0);
+  const [showModeModal, setShowModeModal] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [isDatePending, startDateTransition] = useTransition();
   const dateTabRef = useRef<HTMLButtonElement>(null);
@@ -122,6 +127,21 @@ export function PosTerminal({
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(id);
+  }, []);
+
+  // While offline, a cashier can keep tapping items onto the cart (no network needed),
+  // but every action that touches the server — checkout, hold recall, swap, reports, log
+  // off — is disabled until connectivity returns, so nothing gets attempted against a dead
+  // connection and silently fails or desyncs.
+  useEffect(() => {
+    const goOnline = () => setIsOnline(true);
+    const goOffline = () => setIsOnline(false);
+    window.addEventListener("online", goOnline);
+    window.addEventListener("offline", goOffline);
+    return () => {
+      window.removeEventListener("online", goOnline);
+      window.removeEventListener("offline", goOffline);
+    };
   }, []);
 
   function changeDate(date: Date) {
@@ -273,6 +293,11 @@ export function PosTerminal({
       toast.error("Add at least one ticket or item to this order.");
       return;
     }
+    if (!isOnline) {
+      setOfflineSalesBlocked((n) => n + 1);
+      toast.error("You're offline — checkout needs a connection.");
+      return;
+    }
     startTransition(async () => {
       const result = await posCheckoutAction(
         {
@@ -287,6 +312,15 @@ export function PosTerminal({
         return;
       }
       toast.success(`Sale complete — ${result.reference} · ${formatNaira(result.total ?? 0)}`);
+      await printPosReceipt({
+        reference: result.reference ?? "",
+        branchName,
+        staffName,
+        paymentMethod: method,
+        ticketLines: Object.values(ticketLines).map((l) => ({ label: l.label, quantity: l.quantity, price: l.price })),
+        itemLines: Object.values(itemLines).map((l) => ({ label: l.name, quantity: l.quantity, price: l.price })),
+        total: result.total ?? total,
+      });
       clearCart();
     });
   }
@@ -302,8 +336,15 @@ export function PosTerminal({
           ref={dateTabRef}
           active={activeTab === "tickets"}
           onClick={() => {
-            if (activeTab === "tickets") setShowDatePicker((v) => !v);
-            else setActiveTab("tickets");
+            if (activeTab === "tickets") {
+              if (!isOnline) {
+                toast.error("Changing the date needs a connection — you're offline.");
+                return;
+              }
+              setShowDatePicker((v) => !v);
+            } else {
+              setActiveTab("tickets");
+            }
           }}
           icon={<Ticket size={14} />}
         >
@@ -321,8 +362,9 @@ export function PosTerminal({
             <Search size={14} /> Find Item
           </button>
           <button
+            disabled={!isOnline}
             onClick={() => setShowHeldOrders(true)}
-            className="relative flex items-center gap-1.5 rounded-full border border-white/10 px-3.5 py-1.5 text-sm font-medium text-muted transition-all hover:border-white/30 hover:text-white"
+            className="relative flex items-center gap-1.5 rounded-full border border-white/10 px-3.5 py-1.5 text-sm font-medium text-muted transition-all hover:border-white/30 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
           >
             <PauseCircle size={14} /> Held
             {heldOrders.length > 0 && (
@@ -437,7 +479,11 @@ export function PosTerminal({
           <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
             <p className="text-sm font-semibold">Current Order</p>
             {!cartEmpty && (
-              <button onClick={clearCart} className="flex items-center gap-1 text-xs text-danger hover:underline">
+              <button
+                disabled={!isOnline}
+                onClick={clearCart}
+                className="flex items-center gap-1 text-xs text-danger hover:underline disabled:cursor-not-allowed disabled:opacity-30"
+              >
                 <Trash2 size={12} /> Clear
               </button>
             )}
@@ -501,26 +547,31 @@ export function PosTerminal({
             </div>
             <div className="grid grid-cols-3 gap-2">
               <button
-                disabled={cartEmpty}
+                disabled={cartEmpty || !isOnline}
                 onClick={holdOrder}
                 className="flex flex-col items-center justify-center gap-1 rounded-xl border border-white/10 bg-white/5 py-3 text-xs font-semibold text-white transition-transform active:scale-95 disabled:opacity-30"
               >
                 <PauseCircle size={16} /> Hold
               </button>
               <button
-                disabled={cartEmpty || isPending}
+                disabled={cartEmpty || isPending || !isOnline}
                 onClick={() => checkout("CASH")}
                 className="flex flex-col items-center justify-center gap-1 rounded-xl bg-success py-3 text-xs font-semibold text-black transition-transform active:scale-95 disabled:opacity-30"
               >
                 <Banknote size={16} /> Cash
               </button>
               <button
-                disabled={cartEmpty || isPending}
+                disabled={cartEmpty || isPending || !isOnline}
                 onClick={() => checkout("CARD")}
                 className="flex flex-col items-center justify-center gap-1 rounded-xl bg-gradient-to-r from-brand to-accent-cyan py-3 text-xs font-semibold text-white transition-transform active:scale-95 disabled:opacity-30"
               >
                 <CreditCard size={16} /> Card
               </button>
+              {!isOnline && (
+                <p className="col-span-3 text-center text-[11px] text-danger">
+                  Offline — keep adding items. Checkout will be available once you&rsquo;re back online.
+                </p>
+              )}
             </div>
           </div>
         </aside>
@@ -529,19 +580,19 @@ export function PosTerminal({
       {/* Bottom action bar */}
       <div className="flex flex-wrap items-stretch divide-x divide-white/10 border-t border-white/10 bg-white/[0.03] text-xs font-medium text-muted">
         <form action={logoutAction} className="contents">
-          <ActionBarButton type="submit" icon={<LogOut size={13} />} label="Log Off" />
+          <ActionBarButton type="submit" icon={<LogOut size={13} />} label="Log Off" disabled={!isOnline} />
         </form>
-        <ActionBarButton icon={<XCircle size={13} />} label="Abort" onClick={abortOrder} danger />
-        <ActionBarButton icon={<RefreshCw size={13} />} label="Refresh" onClick={() => router.refresh()} />
-        <ActionBarButton icon={<Receipt size={13} />} label="Today's Sales" onClick={() => setActiveModal("orders")} />
-        <ActionBarButton icon={<Users size={13} />} label="Get Sales By User" onClick={() => setActiveModal("userSales")} />
-        <ActionBarButton icon={<ClipboardList size={13} />} label="Find Booking" onClick={() => setActiveModal("findBooking")} />
+        <ActionBarButton icon={<XCircle size={13} />} label="Abort" onClick={abortOrder} danger disabled={!isOnline} />
+        <ActionBarButton icon={<RefreshCw size={13} />} label="Refresh" onClick={() => router.refresh()} disabled={!isOnline} />
+        <ActionBarButton icon={<Receipt size={13} />} label="Today's Sales" onClick={() => setActiveModal("orders")} disabled={!isOnline} />
+        <ActionBarButton icon={<Users size={13} />} label="Get Sales By User" onClick={() => setActiveModal("userSales")} disabled={!isOnline} />
+        <ActionBarButton icon={<ClipboardList size={13} />} label="Find Booking" onClick={() => setActiveModal("findBooking")} disabled={!isOnline} />
         <ActionBarButton
-          icon={<Wifi size={13} />}
-          label="Mode: Online"
-          onClick={() => toast("OJAJA POS runs online-only — there's no offline mode in this deployment.")}
+          icon={isOnline ? <Wifi size={13} /> : <WifiOff size={13} />}
+          label={isOnline ? "Mode: Online" : "Mode: Offline"}
+          onClick={() => setShowModeModal(true)}
         />
-        <OthersMenu onSelect={handleOthersSelect} />
+        <OthersMenu onSelect={handleOthersSelect} disabled={!isOnline} />
       </div>
 
       {/* Bottom status bar */}
@@ -551,9 +602,15 @@ export function PosTerminal({
         <span>
           {staffName} · {branchName}
         </span>
-        <span className="flex items-center gap-1 text-success">
-          <Wifi size={12} /> Online
-        </span>
+        {isOnline ? (
+          <span className="flex items-center gap-1 text-success">
+            <Wifi size={12} /> Online
+          </span>
+        ) : (
+          <span className="flex items-center gap-1 text-danger">
+            <WifiOff size={12} /> Offline
+          </span>
+        )}
       </div>
 
       {showHeldOrders && (
@@ -615,6 +672,37 @@ export function PosTerminal({
           onClose={() => setActiveModal(null)}
         />
       )}
+
+      {showModeModal && (
+        <PosModalShell title="Cashier Mode" onClose={() => setShowModeModal(false)} widthClass="max-w-sm">
+          <div className="flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.03] p-3.5">
+            <p className="flex items-center gap-1.5 text-sm font-semibold">
+              {isOnline ? <Wifi size={15} className="text-success" /> : <WifiOff size={15} className="text-danger" />}
+              Mode: {isOnline ? "Online" : "Offline"}
+            </p>
+            <button
+              onClick={() => setIsOnline((v) => !v)}
+              className="rounded-lg bg-brand px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-brand-light"
+            >
+              Toggle Mode
+            </button>
+          </div>
+
+          <p className="mt-4 text-center text-sm text-muted">
+            Offline sales blocked this session: <span className="font-semibold text-white">{offlineSalesBlocked}</span>
+          </p>
+          <p className="mt-1 text-center text-xs text-muted">
+            While offline you can still browse and add tickets or concessions to the cart — payment can only be taken once you&rsquo;re back online.
+          </p>
+
+          <button
+            onClick={() => setShowModeModal(false)}
+            className="mt-4 w-full rounded-lg border border-white/10 py-2.5 text-sm font-semibold text-white hover:bg-white/5"
+          >
+            Close
+          </button>
+        </PosModalShell>
+      )}
     </div>
   );
 }
@@ -643,19 +731,22 @@ function ActionBarButton({
   onClick,
   type = "button",
   danger,
+  disabled,
 }: {
   icon: React.ReactNode;
   label: string;
   onClick?: () => void;
   type?: "button" | "submit";
   danger?: boolean;
+  disabled?: boolean;
 }) {
   return (
     <button
       type={type}
+      disabled={disabled}
       onClick={onClick}
       className={cn(
-        "flex flex-1 flex-col items-center gap-1 whitespace-nowrap px-3 py-2.5 transition-colors hover:bg-white/10 hover:text-white",
+        "flex flex-1 flex-col items-center gap-1 whitespace-nowrap px-3 py-2.5 transition-colors hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent",
         danger && "text-danger hover:text-danger"
       )}
     >

@@ -184,12 +184,15 @@ export async function confirmPaymentAction(reference: string, outcome: "success"
     await prisma.seatLock.deleteMany({ where: { showtimeId: booking.showtimeId } });
 
     if (contactEmail) {
+      const seatList = booking.seats.map((s) => `${s.seat.row}${s.seat.number}`).join(", ");
       await notificationProvider.sendEmail(
         contactEmail,
         `Your OJAJA Cinemas booking is confirmed (${booking.reference})`,
         `Hi ${contactName}, your booking for ${booking.showtime.movie.title} at ${formatShowtime(
           booking.showtime.startTime
-        )} is confirmed. Total paid: ${formatNaira(booking.totalAmount)}. Show your QR e-ticket at the door.`
+        )} is confirmed. Seat${booking.seats.length === 1 ? "" : "s"}: ${seatList}. Total paid: ${formatNaira(
+          booking.totalAmount
+        )}. Show your QR e-ticket at the door.`
       );
     }
     if (contactPhone) {

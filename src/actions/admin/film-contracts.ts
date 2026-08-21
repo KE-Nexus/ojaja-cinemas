@@ -54,6 +54,17 @@ export async function updateFilmContractAction(_prev: FormState, formData: FormD
   redirect("/admin/movies/contracts");
 }
 
+/**
+ * Scheduling a session for a movie at a branch that has no Film Contract yet is enough
+ * intent on its own — this silently backfills the contract so admins don't have to
+ * remember a separate step just to make a scheduled movie visible on the public site.
+ */
+export async function ensureFilmContract(movieId: string, branchId: string) {
+  const existing = await prisma.filmContract.findFirst({ where: { movieId, branchId } });
+  if (existing) return;
+  await prisma.filmContract.create({ data: { movieId, branchId, contractStartDate: new Date() } });
+}
+
 export async function deleteFilmContractAction(id: string) {
   const session = await requireRole(["SUPERVISOR", "CIRCUIT_ADMIN"]);
   const contract = await prisma.filmContract.findUnique({ where: { id } });

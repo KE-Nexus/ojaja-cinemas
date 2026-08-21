@@ -11,6 +11,21 @@ export function formatNaira(amount: number): string {
 
 const WAT_TIME_ZONE = "Africa/Lagos";
 
+/**
+ * Parses a "YYYY-MM-DDTHH:mm" datetime-local string (from a scheduling form) as WAT
+ * wall-clock time and returns the correct UTC instant — deliberately NOT `new Date(value)`,
+ * which interprets a timezone-less string using the server process's own ambient timezone.
+ * If that process isn't running in WAT (e.g. a UTC-configured deployment), every session
+ * time silently shifts by the server/WAT offset. Nigeria has no DST, so WAT is always a
+ * fixed UTC+1 — safe to hardcode rather than needing a timezone database.
+ */
+export function parseWatDateTimeLocal(value: string): Date {
+  const [datePart, timePart] = value.split("T");
+  const [year, month, day] = datePart.split("-").map(Number);
+  const [hour, minute] = (timePart ?? "00:00").split(":").map(Number);
+  return new Date(Date.UTC(year, month - 1, day, hour - 1, minute));
+}
+
 export function formatShowtime(date: Date | string): string {
   const d = typeof date === "string" ? new Date(date) : date;
   return new Intl.DateTimeFormat("en-NG", {

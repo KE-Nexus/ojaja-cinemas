@@ -3,6 +3,7 @@ import Image from "next/image";
 import { MapPin, Phone, Mail, Clock, Play } from "lucide-react";
 import { formatRuntime } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
+import { nowShowingWhere } from "@/lib/movie-availability";
 import type { Branch, BranchImage, Auditorium, Movie } from "@prisma/client";
 
 type CinemaHomeBranch = Branch & { auditoriums: Auditorium[]; images: BranchImage[] };
@@ -29,16 +30,9 @@ export function CinemaHome({ branch, scheduledMovies }: { branch: CinemaHomeBran
         )}
 
         <div className="mx-auto -mt-16 max-w-5xl px-4 pb-8 sm:px-6">
-          <div className="flex flex-col items-center gap-4 text-center sm:flex-row sm:items-end sm:text-left">
-            {branch.logoUrl && (
-              <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-border bg-background p-2">
-                <Image src={branch.logoUrl} alt={`${branch.name} logo`} width={96} height={96} unoptimized className="h-full w-full object-contain" />
-              </div>
-            )}
-            <div>
-              <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">{branch.name}</h1>
-              <p className="mt-1 text-muted">{branch.city}</p>
-            </div>
+          <div className="text-center sm:text-left">
+            <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">{branch.name}</h1>
+            <p className="mt-1 text-muted">{branch.city}</p>
           </div>
         </div>
       </section>
@@ -133,10 +127,7 @@ export function CinemaHome({ branch, scheduledMovies }: { branch: CinemaHomeBran
 export async function getScheduledMoviesForBranch(branch: { id: string; useFilmSchedule: boolean }): Promise<Movie[]> {
   if (!branch.useFilmSchedule) return [];
   return prisma.movie.findMany({
-    where: {
-      status: "NOW_SHOWING",
-      showtimes: { some: { startTime: { gte: new Date() }, status: "OPEN", salesOnWeb: true, auditorium: { branchId: branch.id } } },
-    },
+    where: nowShowingWhere(branch.id),
     orderBy: { releaseDate: "desc" },
     take: 6,
   });

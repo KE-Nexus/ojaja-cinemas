@@ -7,6 +7,8 @@ import { logAdminAction } from "@/lib/audit";
 import { filmSessionBatchSchema, filmSessionRowSchema } from "@/lib/validation";
 import { assertHasClaim } from "@/lib/claims";
 import { assertBranchAccess } from "@/lib/branch-scope";
+import { parseWatDateTimeLocal } from "@/lib/format";
+import { ensureFilmContract } from "@/actions/admin/film-contracts";
 
 export type SessionFormState = { error?: string; success?: boolean } | null;
 
@@ -86,8 +88,8 @@ export async function createFilmSessionsAction(_prev: SessionFormState, formData
       priceCardId: parsed.data.priceCardId || null,
       format: parsed.data.format,
       trailerDurationMins: parsed.data.trailerDurationMins,
-      startTime: new Date(parsed.data.startTime),
-      endTime: parsed.data.endTime ? new Date(parsed.data.endTime) : null,
+      startTime: parseWatDateTimeLocal(parsed.data.startTime),
+      endTime: parsed.data.endTime ? parseWatDateTimeLocal(parsed.data.endTime) : null,
       cleanupTimeMins: parsed.data.cleanupTimeMins,
       salesOnPos,
       salesOnWeb,
@@ -134,6 +136,8 @@ export async function createFilmSessionsAction(_prev: SessionFormState, formData
       });
     }
   });
+
+  await ensureFilmContract(batchParsed.data.movieId, batchParsed.data.branchId);
 
   await logAdminAction(session.sub, "CREATE", "Showtime", "bulk-session-create", {
     movieId: batchParsed.data.movieId,
@@ -198,7 +202,7 @@ export async function updateFilmSessionAction(_prev: SessionFormState, formData:
     if (!priceCard || priceCard.branchId !== existing.auditorium.branchId) return { error: "This price card doesn't belong to this cinema." };
   }
 
-  const newStart = new Date(parsed.data.startTime);
+  const newStart = parseWatDateTimeLocal(parsed.data.startTime);
   if (newStart.getTime() <= Date.now()) return { error: "Choose a start time in the future." };
 
   const conflict = await prisma.showtime.findFirst({
@@ -215,7 +219,7 @@ export async function updateFilmSessionAction(_prev: SessionFormState, formData:
       auditoriumId: parsed.data.auditoriumId,
       priceCardId: parsed.data.priceCardId || null,
       startTime: newStart,
-      endTime: parsed.data.endTime ? new Date(parsed.data.endTime) : null,
+      endTime: parsed.data.endTime ? parseWatDateTimeLocal(parsed.data.endTime) : null,
       basePrice,
       language,
       format: parsed.data.format,
@@ -226,6 +230,8 @@ export async function updateFilmSessionAction(_prev: SessionFormState, formData:
       salesOnWeb,
     },
   });
+
+  await ensureFilmContract(movieId, existing.auditorium.branchId);
 
   await logAdminAction(session.sub, "UPDATE", "Showtime", id);
   revalidatePath("/admin/scheduling");
@@ -260,6 +266,7 @@ export async function duplicateDayAction(auditoriumIds: string[], fromDayStart: 
 
   const sourceSessions = await prisma.showtime.findMany({
     where: { auditoriumId: { in: auditoriumIds }, startTime: { gte: fromStart, lt: fromEnd } },
+    include: { auditorium: true },
   });
 
   let created = 0;
@@ -282,6 +289,7 @@ export async function duplicateDayAction(auditoriumIds: string[], fromDayStart: 
         salesOnWeb: s.salesOnWeb,
       },
     });
+    await ensureFilmContract(s.movieId, s.auditorium.branchId);
     created++;
   }
 
@@ -365,6 +373,7 @@ export async function duplicateAcrossCircuitAction(
         salesOnWeb: s.salesOnWeb,
       },
     });
+    await ensureFilmContract(s.movieId, toBranchId);
     created++;
   }
 
