@@ -17,13 +17,17 @@ export function UserSalesModal({ onClose }: { onClose: () => void }) {
     if (!staffNumber.trim() || !pin.trim()) return;
     setError(null);
     startTransition(async () => {
-      const result = await getUserSalesAction(staffNumber.trim(), pin.trim());
-      if (result.error) {
-        setError(result.error);
-        return;
+      try {
+        const result = await getUserSalesAction(staffNumber.trim(), pin.trim());
+        if (result.error) {
+          setError(result.error);
+          return;
+        }
+        setSummary(result.summary ?? null);
+        setAuthorizedBy(result.authorizedBy ?? null);
+      } catch {
+        setError("You're offline — this needs a connection.");
       }
-      setSummary(result.summary ?? null);
-      setAuthorizedBy(result.authorizedBy ?? null);
     });
   }
 

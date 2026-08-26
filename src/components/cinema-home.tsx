@@ -4,6 +4,7 @@ import { MapPin, Phone, Mail, Clock, Play } from "lucide-react";
 import { formatRuntime } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
 import { nowShowingWhere } from "@/lib/movie-availability";
+import { PromoBannerSlider } from "@/components/promo-banner-slider";
 import type { Branch, BranchImage, Auditorium, Movie } from "@prisma/client";
 
 type CinemaHomeBranch = Branch & { auditoriums: Auditorium[]; images: BranchImage[] };
@@ -22,17 +23,24 @@ export function CinemaHome({ branch, scheduledMovies }: { branch: CinemaHomeBran
           </div>
         ) : promotionalImages.length > 0 ? (
           <div className="relative h-72 sm:h-96">
-            <Image src={promotionalImages[0].dataUrl} alt="" fill unoptimized className="object-cover" priority />
-            <div className="absolute inset-0 bg-gradient-to-t from-surface via-surface/50 to-transparent" />
+            <PromoBannerSlider images={promotionalImages.map((i) => i.dataUrl)} />
+            <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-surface via-surface/50 to-transparent" />
           </div>
         ) : (
           <div className="h-40" />
         )}
 
-        <div className="mx-auto -mt-16 max-w-5xl px-4 pb-8 sm:px-6">
-          <div className="text-center sm:text-left">
-            <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">{branch.name}</h1>
-            <p className="mt-1 text-muted">{branch.city}</p>
+        <div className="relative z-10 mx-auto -mt-16 max-w-5xl px-4 pb-8 sm:px-6">
+          <div className="flex flex-col items-center gap-4 text-center sm:flex-row sm:items-end sm:text-left">
+            {branch.logoUrl && (
+              <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-border bg-background p-2">
+                <Image src={branch.logoUrl} alt={`${branch.name} logo`} width={96} height={96} unoptimized className="h-full w-full object-contain" />
+              </div>
+            )}
+            <div>
+              <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">{branch.name}</h1>
+              <p className="mt-1 text-muted">{branch.city}</p>
+            </div>
           </div>
         </div>
       </section>
@@ -74,18 +82,6 @@ export function CinemaHome({ branch, scheduledMovies }: { branch: CinemaHomeBran
               </div>
             )}
 
-            {galleryImages.length > 0 && (
-              <div className="mt-10">
-                <h2 className="text-xl font-bold tracking-tight">Gallery</h2>
-                <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
-                  {galleryImages.map((img) => (
-                    <div key={img.id} className="relative aspect-square overflow-hidden rounded-lg bg-surface-2">
-                      <Image src={img.dataUrl} alt="" fill unoptimized className="object-cover" />
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
 
           <div className="space-y-4">
@@ -119,6 +115,19 @@ export function CinemaHome({ branch, scheduledMovies }: { branch: CinemaHomeBran
             </div>
           </div>
         </div>
+
+        {galleryImages.length > 0 && (
+          <div className="mt-14">
+            <h2 className="text-xl font-bold tracking-tight">Gallery</h2>
+            <div className="mt-4 grid grid-cols-1 gap-5 sm:grid-cols-2">
+              {galleryImages.map((img) => (
+                <div key={img.id} className="relative aspect-[4/3] overflow-hidden rounded-xl bg-surface-2">
+                  <Image src={img.dataUrl} alt="" fill unoptimized sizes="(min-width: 640px) 50vw, 100vw" className="object-cover" />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

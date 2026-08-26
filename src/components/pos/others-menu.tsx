@@ -13,7 +13,7 @@ const OPTIONS: { action: OthersAction; label: string; icon: React.ReactNode }[] 
   { action: "closeSession", label: "Close Session", icon: <Lock size={15} /> },
 ];
 
-export function OthersMenu({ onSelect, disabled }: { onSelect: (action: OthersAction) => void; disabled?: boolean }) {
+export function OthersMenu({ onSelect }: { onSelect: (action: OthersAction) => void }) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState({ bottom: 0, right: 0 });
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -48,10 +48,9 @@ export function OthersMenu({ onSelect, disabled }: { onSelect: (action: OthersAc
     <>
       <button
         ref={buttonRef}
-        disabled={disabled}
         onClick={toggle}
         className={cn(
-          "flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-sm font-medium transition-all disabled:cursor-not-allowed disabled:opacity-30",
+          "flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-sm font-medium transition-all",
           open ? "border-brand-light text-white" : "border-white/10 text-muted hover:border-white/30 hover:text-white"
         )}
       >

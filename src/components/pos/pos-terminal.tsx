@@ -76,6 +76,17 @@ type HeldOrder = {
   itemLines: Record<string, ItemCartLine>;
 };
 
+type QueuedSale = {
+  id: string;
+  queuedAt: Date;
+  selectedShowtimeId: string | null;
+  paymentMethod: "CASH" | "CARD";
+  ticketLines: Record<string, TicketCartLine>;
+  itemLines: Record<string, ItemCartLine>;
+};
+
+type PendingAction = { id: string; kind: "logOff" | "refresh" | "openCashDrawer"; queuedAt: Date };
+
 const CONCESSION_PAGE_SIZE = 15;
 
 function toLocalDateStr(d: Date) {
@@ -118,7 +129,8 @@ export function PosTerminal({
   const [activeModal, setActiveModal] = useState<"findItem" | "findBooking" | "userSales" | "orders" | "closeSession" | "swapTicket" | null>(null);
   const [now, setNow] = useState(() => new Date());
   const [isOnline, setIsOnline] = useState(() => typeof navigator === "undefined" || navigator.onLine);
-  const [offlineSalesBlocked, setOfflineSalesBlocked] = useState(0);
+  const [queuedSales, setQueuedSales] = useState<QueuedSale[]>([]);
+  const [pendingActions, setPendingActions] = useState<PendingAction[]>([]);
   const [showModeModal, setShowModeModal] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [isDatePending, startDateTransition] = useTransition();
@@ -129,10 +141,12 @@ export function PosTerminal({
     return () => clearInterval(id);
   }, []);
 
-  // While offline, a cashier can keep tapping items onto the cart (no network needed),
-  // but every action that touches the server — checkout, hold recall, swap, reports, log
-  // off — is disabled until connectivity returns, so nothing gets attempted against a dead
-  // connection and silently fails or desyncs.
+  // Nothing is ever disabled just for being offline — a cashier can keep working the whole
+  // terminal. Cash/Card sales, Log Off, Refresh, and Open Cash Drawer are all queued while
+  // offline and auto-run the moment connectivity returns (see processQueuedSales /
+  // processPendingActions below). Actions that need to fetch or search live data right now
+  // (Find Booking, Get Sales By User, Swap Ticket, Close Session) still open normally —
+  // there's nothing meaningful to pre-queue for a lookup that doesn't have an answer yet.
   useEffect(() => {
     const goOnline = () => setIsOnline(true);
     const goOffline = () => setIsOnline(false);
@@ -143,6 +157,71 @@ export function PosTerminal({
       window.removeEventListener("offline", goOffline);
     };
   }, []);
+
+  function processQueuedSales(sales: QueuedSale[]) {
+    startTransition(async () => {
+      for (const sale of sales) {
+        const saleTicketTotal = Object.values(sale.ticketLines).reduce((s, l) => s + l.price * l.quantity, 0);
+        const saleItemTotal = Object.values(sale.itemLines).reduce((s, l) => s + l.price * l.quantity, 0);
+        const result = await posCheckoutAction(
+          {
+            showtimeId: sale.selectedShowtimeId,
+            ticketLines: Object.values(sale.ticketLines).map((l) => ({ ticketClassId: l.ticketClassId, quantity: l.quantity })),
+            itemLines: Object.values(sale.itemLines).map((l) => ({ posItemId: l.posItemId, quantity: l.quantity })),
+          },
+          sale.paymentMethod
+        );
+        if (result.error) {
+          toast.error(`Queued sale from ${sale.queuedAt.toLocaleTimeString("en-NG")} failed to sync: ${result.error}`);
+          continue;
+        }
+        toast.success(`Queued sale synced — ${result.reference} · ${formatNaira(result.total ?? saleTicketTotal + saleItemTotal)}`);
+        await printPosReceipt({
+          reference: result.reference ?? "",
+          branchName,
+          staffName,
+          paymentMethod: sale.paymentMethod,
+          ticketLines: Object.values(sale.ticketLines).map((l) => ({ label: l.label, quantity: l.quantity, price: l.price })),
+          itemLines: Object.values(sale.itemLines).map((l) => ({ label: l.name, quantity: l.quantity, price: l.price })),
+          total: result.total ?? saleTicketTotal + saleItemTotal,
+        });
+      }
+      setQueuedSales([]);
+    });
+  }
+
+  function processPendingActions(actions: PendingAction[]) {
+    startTransition(async () => {
+      for (const a of actions) {
+        if (a.kind === "refresh") {
+          router.refresh();
+          toast.success("Refreshed.");
+          continue;
+        }
+        if (a.kind === "openCashDrawer") {
+          const result = await openCashDrawerAction();
+          if (result.error) toast.error(result.error);
+          else toast.success("Cash drawer opened.");
+          continue;
+        }
+        if (a.kind === "logOff") {
+          await logoutAction();
+          return;
+        }
+      }
+      setPendingActions([]);
+    });
+  }
+
+  const wasOnlineRef = useRef(isOnline);
+  useEffect(() => {
+    if (isOnline && !wasOnlineRef.current) {
+      if (queuedSales.length > 0) processQueuedSales(queuedSales);
+      if (pendingActions.length > 0) processPendingActions(pendingActions);
+    }
+    wasOnlineRef.current = isOnline;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOnline]);
 
   function changeDate(date: Date) {
     if (Object.keys(ticketLines).length > 0) {
@@ -271,8 +350,33 @@ export function PosTerminal({
     setHeldOrders((prev) => prev.filter((h) => h.id !== id));
   }
 
+  function handleLogOff() {
+    if (!isOnline) {
+      setPendingActions((prev) => [...prev, { id: crypto.randomUUID(), kind: "logOff", queuedAt: new Date() }]);
+      toast.success("Offline — you'll be logged off automatically once you're back online.");
+      return;
+    }
+    startTransition(async () => {
+      await logoutAction();
+    });
+  }
+
+  function handleRefresh() {
+    if (!isOnline) {
+      setPendingActions((prev) => [...prev, { id: crypto.randomUUID(), kind: "refresh", queuedAt: new Date() }]);
+      toast.success("Offline — this will refresh automatically once you're back online.");
+      return;
+    }
+    router.refresh();
+  }
+
   function handleOthersSelect(action: "openCashDrawer" | "closeSession" | "swapTicket") {
     if (action === "openCashDrawer") {
+      if (!isOnline) {
+        setPendingActions((prev) => [...prev, { id: crypto.randomUUID(), kind: "openCashDrawer", queuedAt: new Date() }]);
+        toast.success("Offline — the cash drawer will open automatically once you're back online.");
+        return;
+      }
       startTransition(async () => {
         const result = await openCashDrawerAction();
         if (result.error) toast.error(result.error);
@@ -294,8 +398,17 @@ export function PosTerminal({
       return;
     }
     if (!isOnline) {
-      setOfflineSalesBlocked((n) => n + 1);
-      toast.error("You're offline — checkout needs a connection.");
+      const queued: QueuedSale = {
+        id: crypto.randomUUID(),
+        queuedAt: new Date(),
+        selectedShowtimeId,
+        paymentMethod: method,
+        ticketLines,
+        itemLines,
+      };
+      setQueuedSales((prev) => [...prev, queued]);
+      toast.success("Offline — sale queued. It'll process automatically once you're back online.");
+      clearCart();
       return;
     }
     startTransition(async () => {
@@ -362,9 +475,8 @@ export function PosTerminal({
             <Search size={14} /> Find Item
           </button>
           <button
-            disabled={!isOnline}
             onClick={() => setShowHeldOrders(true)}
-            className="relative flex items-center gap-1.5 rounded-full border border-white/10 px-3.5 py-1.5 text-sm font-medium text-muted transition-all hover:border-white/30 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
+            className="relative flex items-center gap-1.5 rounded-full border border-white/10 px-3.5 py-1.5 text-sm font-medium text-muted transition-all hover:border-white/30 hover:text-white"
           >
             <PauseCircle size={14} /> Held
             {heldOrders.length > 0 && (
@@ -479,11 +591,7 @@ export function PosTerminal({
           <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
             <p className="text-sm font-semibold">Current Order</p>
             {!cartEmpty && (
-              <button
-                disabled={!isOnline}
-                onClick={clearCart}
-                className="flex items-center gap-1 text-xs text-danger hover:underline disabled:cursor-not-allowed disabled:opacity-30"
-              >
+              <button onClick={clearCart} className="flex items-center gap-1 text-xs text-danger hover:underline">
                 <Trash2 size={12} /> Clear
               </button>
             )}
@@ -547,21 +655,21 @@ export function PosTerminal({
             </div>
             <div className="grid grid-cols-3 gap-2">
               <button
-                disabled={cartEmpty || !isOnline}
+                disabled={cartEmpty}
                 onClick={holdOrder}
                 className="flex flex-col items-center justify-center gap-1 rounded-xl border border-white/10 bg-white/5 py-3 text-xs font-semibold text-white transition-transform active:scale-95 disabled:opacity-30"
               >
                 <PauseCircle size={16} /> Hold
               </button>
               <button
-                disabled={cartEmpty || isPending || !isOnline}
+                disabled={cartEmpty || isPending}
                 onClick={() => checkout("CASH")}
                 className="flex flex-col items-center justify-center gap-1 rounded-xl bg-success py-3 text-xs font-semibold text-black transition-transform active:scale-95 disabled:opacity-30"
               >
                 <Banknote size={16} /> Cash
               </button>
               <button
-                disabled={cartEmpty || isPending || !isOnline}
+                disabled={cartEmpty || isPending}
                 onClick={() => checkout("CARD")}
                 className="flex flex-col items-center justify-center gap-1 rounded-xl bg-gradient-to-r from-brand to-accent-cyan py-3 text-xs font-semibold text-white transition-transform active:scale-95 disabled:opacity-30"
               >
@@ -569,7 +677,12 @@ export function PosTerminal({
               </button>
               {!isOnline && (
                 <p className="col-span-3 text-center text-[11px] text-danger">
-                  Offline — keep adding items. Checkout will be available once you&rsquo;re back online.
+                  Offline — Cash/Card sales are queued and sync automatically once you&rsquo;re back online.
+                </p>
+              )}
+              {queuedSales.length > 0 && (
+                <p className="col-span-3 text-center text-[11px] text-accent-gold">
+                  {queuedSales.length} sale{queuedSales.length === 1 ? "" : "s"} queued, waiting to sync.
                 </p>
               )}
             </div>
@@ -579,20 +692,18 @@ export function PosTerminal({
 
       {/* Bottom action bar */}
       <div className="flex flex-wrap items-stretch divide-x divide-white/10 border-t border-white/10 bg-white/[0.03] text-xs font-medium text-muted">
-        <form action={logoutAction} className="contents">
-          <ActionBarButton type="submit" icon={<LogOut size={13} />} label="Log Off" disabled={!isOnline} />
-        </form>
-        <ActionBarButton icon={<XCircle size={13} />} label="Abort" onClick={abortOrder} danger disabled={!isOnline} />
-        <ActionBarButton icon={<RefreshCw size={13} />} label="Refresh" onClick={() => router.refresh()} disabled={!isOnline} />
-        <ActionBarButton icon={<Receipt size={13} />} label="Today's Sales" onClick={() => setActiveModal("orders")} disabled={!isOnline} />
-        <ActionBarButton icon={<Users size={13} />} label="Get Sales By User" onClick={() => setActiveModal("userSales")} disabled={!isOnline} />
-        <ActionBarButton icon={<ClipboardList size={13} />} label="Find Booking" onClick={() => setActiveModal("findBooking")} disabled={!isOnline} />
+        <ActionBarButton icon={<LogOut size={13} />} label="Log Off" onClick={handleLogOff} />
+        <ActionBarButton icon={<XCircle size={13} />} label="Abort" onClick={abortOrder} danger />
+        <ActionBarButton icon={<RefreshCw size={13} />} label="Refresh" onClick={handleRefresh} />
+        <ActionBarButton icon={<Receipt size={13} />} label="Today's Sales" onClick={() => setActiveModal("orders")} />
+        <ActionBarButton icon={<Users size={13} />} label="Get Sales By User" onClick={() => setActiveModal("userSales")} />
+        <ActionBarButton icon={<ClipboardList size={13} />} label="Find Booking" onClick={() => setActiveModal("findBooking")} />
         <ActionBarButton
           icon={isOnline ? <Wifi size={13} /> : <WifiOff size={13} />}
           label={isOnline ? "Mode: Online" : "Mode: Offline"}
           onClick={() => setShowModeModal(true)}
         />
-        <OthersMenu onSelect={handleOthersSelect} disabled={!isOnline} />
+        <OthersMenu onSelect={handleOthersSelect} />
       </div>
 
       {/* Bottom status bar */}
@@ -689,10 +800,10 @@ export function PosTerminal({
           </div>
 
           <p className="mt-4 text-center text-sm text-muted">
-            Offline sales blocked this session: <span className="font-semibold text-white">{offlineSalesBlocked}</span>
+            Queued, waiting to sync: <span className="font-semibold text-white">{queuedSales.length + pendingActions.length}</span>
           </p>
           <p className="mt-1 text-center text-xs text-muted">
-            While offline you can still browse and add tickets or concessions to the cart — payment can only be taken once you&rsquo;re back online.
+            Nothing is disabled while offline — every button still works. Cash/Card sales, Log Off, Refresh, and Open Cash Drawer are all queued and run automatically the moment you&rsquo;re back online. Lookups that need live data (Find Booking, Get Sales By User, Swap Ticket, Close Session) still open, but need a connection to actually return anything.
           </p>
 
           <button

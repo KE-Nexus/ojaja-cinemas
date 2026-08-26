@@ -29,9 +29,13 @@ export function SwapTicketModal({
     setError(null);
     setBooking(null);
     startTransition(async () => {
-      const result = await findBookingAction({ reference: reference.trim() });
-      if (result.error) setError(result.error);
-      else setBooking(result.booking ?? null);
+      try {
+        const result = await findBookingAction({ reference: reference.trim() });
+        if (result.error) setError(result.error);
+        else setBooking(result.booking ?? null);
+      } catch {
+        setError("You're offline — this needs a connection.");
+      }
     });
   }
 
@@ -43,14 +47,18 @@ export function SwapTicketModal({
     }
     const replacementTicketClassIds = replacementLines.flatMap((l) => Array(l.quantity).fill(l.ticketClassId));
     startTransition(async () => {
-      const result = await posSwapTicketAction(booking.reference, replacementTicketClassIds);
-      if (result.error) {
-        setError(result.error);
-        return;
+      try {
+        const result = await posSwapTicketAction(booking.reference, replacementTicketClassIds);
+        if (result.error) {
+          setError(result.error);
+          return;
+        }
+        toast.success(`Seats swapped for ${booking.reference}.`);
+        onSwapComplete();
+        onClose();
+      } catch {
+        setError("You're offline — this needs a connection.");
       }
-      toast.success(`Seats swapped for ${booking.reference}.`);
-      onSwapComplete();
-      onClose();
     });
   }
 

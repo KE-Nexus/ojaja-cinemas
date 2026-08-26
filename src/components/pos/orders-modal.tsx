@@ -11,10 +11,12 @@ export function OrdersModal({ onClose }: { onClose: () => void }) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    todaysOrdersAction().then((result) => {
-      if (result.error) setError(result.error);
-      else setOrders(result.orders ?? []);
-    });
+    todaysOrdersAction()
+      .then((result) => {
+        if (result.error) setError(result.error);
+        else setOrders(result.orders ?? []);
+      })
+      .catch(() => setError("You're offline — today's orders need a connection to load."));
   }, []);
 
   return (

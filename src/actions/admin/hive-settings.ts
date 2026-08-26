@@ -11,13 +11,37 @@ export type FormState = { error?: string; success?: boolean } | null;
 
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
 
-async function fileToDataUrl(file: File): Promise<string> {
+const EXTENSION_MIME_TYPES: Record<string, string> = {
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  png: "image/png",
+  gif: "image/gif",
+  webp: "image/webp",
+  avif: "image/avif",
+  svg: "image/svg+xml",
+  bmp: "image/bmp",
+};
+
+/**
+ * Some browsers/OS combos leave `file.type` blank for formats their MIME database doesn't
+ * recognize — JPEG usually isn't affected, but AVIF (and occasionally others) commonly are.
+ * A blank `file.type` failed `.startsWith("image/")` and got rejected as "not an image", or
+ * a JPEG saved from certain editors/cameras that strip MIME metadata hit the same gap — so
+ * this falls back to the file extension whenever the browser doesn't supply a usable type.
+ */
+function resolveImageMimeType(file: File): string | null {
+  if (file.type.startsWith("image/")) return file.type;
+  const ext = file.name.split(".").pop()?.toLowerCase();
+  return ext ? (EXTENSION_MIME_TYPES[ext] ?? null) : null;
+}
+
+async function fileToDataUrl(file: File, mimeType: string): Promise<string> {
   const buffer = Buffer.from(await file.arrayBuffer());
-  return `data:${file.type};base64,${buffer.toString("base64")}`;
+  return `data:${mimeType};base64,${buffer.toString("base64")}`;
 }
 
 function validateImageFile(file: File): string | null {
-  if (!file.type.startsWith("image/")) return `"${file.name}" isn't an image file.`;
+  if (!resolveImageMimeType(file)) return `"${file.name}" isn't a recognized image file.`;
   if (file.size > MAX_IMAGE_BYTES) return `"${file.name}" is larger than 4MB.`;
   return null;
 }
@@ -55,7 +79,7 @@ export async function updateHiveSettingsAction(_prev: FormState, formData: FormD
   if (logoFile instanceof File && logoFile.size > 0) {
     const err = validateImageFile(logoFile);
     if (err) return { error: err };
-    logoUrl = await fileToDataUrl(logoFile);
+    logoUrl = await fileToDataUrl(logoFile, resolveImageMimeType(logoFile)!);
   }
 
   const promotionalFiles = formData.getAll("promotionalImages").filter((f): f is File => f instanceof File && f.size > 0);
@@ -82,7 +106,7 @@ export async function updateHiveSettingsAction(_prev: FormState, formData: FormD
       const startPosition = await tx.branchImage.count({ where: { branchId, kind: "PROMOTIONAL" } });
       for (const [i, f] of promotionalFiles.entries()) {
         await tx.branchImage.create({
-          data: { branchId, kind: "PROMOTIONAL", dataUrl: await fileToDataUrl(f), position: startPosition + i },
+          data: { branchId, kind: "PROMOTIONAL", dataUrl: await fileToDataUrl(f, resolveImageMimeType(f)!), position: startPosition + i },
         });
       }
     }
@@ -91,7 +115,7 @@ export async function updateHiveSettingsAction(_prev: FormState, formData: FormD
       const startPosition = await tx.branchImage.count({ where: { branchId, kind: "GALLERY" } });
       for (const [i, f] of galleryFiles.entries()) {
         await tx.branchImage.create({
-          data: { branchId, kind: "GALLERY", dataUrl: await fileToDataUrl(f), position: startPosition + i },
+          data: { branchId, kind: "GALLERY", dataUrl: await fileToDataUrl(f, resolveImageMimeType(f)!), position: startPosition + i },
         });
       }
     }

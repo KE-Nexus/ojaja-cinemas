@@ -21,21 +21,23 @@ export function CloseSessionModal({ canCloseSelf, onClose }: { canCloseSelf: boo
   const router = useRouter();
 
   useEffect(() => {
-    getSessionExpectedTotalsAction().then((result) => {
-      if (result.error) {
-        setError(result.error);
-        return;
-      }
-      setExpected(result.totals ?? null);
-      if (result.totals) {
-        setActual({
-          cash: String(result.totals.cash),
-          card: String(result.totals.card),
-          transfer: String(result.totals.transfer),
-          voucher: String(result.totals.voucher),
-        });
-      }
-    });
+    getSessionExpectedTotalsAction()
+      .then((result) => {
+        if (result.error) {
+          setError(result.error);
+          return;
+        }
+        setExpected(result.totals ?? null);
+        if (result.totals) {
+          setActual({
+            cash: String(result.totals.cash),
+            card: String(result.totals.card),
+            transfer: String(result.totals.transfer),
+            voucher: String(result.totals.voucher),
+          });
+        }
+      })
+      .catch(() => setError("You're offline — session totals need a connection to load."));
   }, []);
 
   const totalExpected = expected ? expected.cash + expected.card + expected.transfer + expected.voucher : 0;
@@ -47,22 +49,26 @@ export function CloseSessionModal({ canCloseSelf, onClose }: { canCloseSelf: boo
     }
     setError(null);
     startTransition(async () => {
-      const result = await posCloseSessionAction(
-        {
-          cash: Number(actual.cash) || 0,
-          card: Number(actual.card) || 0,
-          transfer: Number(actual.transfer) || 0,
-          voucher: Number(actual.voucher) || 0,
-        },
-        canCloseSelf ? undefined : { staffNumber: adminStaffNumber.trim(), pin: adminPin.trim() }
-      );
-      if (result.error) {
-        setError(result.error);
-        return;
+      try {
+        const result = await posCloseSessionAction(
+          {
+            cash: Number(actual.cash) || 0,
+            card: Number(actual.card) || 0,
+            transfer: Number(actual.transfer) || 0,
+            voucher: Number(actual.voucher) || 0,
+          },
+          canCloseSelf ? undefined : { staffNumber: adminStaffNumber.trim(), pin: adminPin.trim() }
+        );
+        if (result.error) {
+          setError(result.error);
+          return;
+        }
+        toast.success("Session closed.");
+        onClose();
+        router.refresh();
+      } catch {
+        setError("You're offline — closing a session needs a connection.");
       }
-      toast.success("Session closed.");
-      onClose();
-      router.refresh();
     });
   }
 

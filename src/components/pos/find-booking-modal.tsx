@@ -21,9 +21,13 @@ export function FindBookingModal({ onClose }: { onClose: () => void }) {
     setError(null);
     setBooking(null);
     startTransition(async () => {
-      const result = await findBookingAction({ [mode]: query.trim() });
-      if (result.error) setError(result.error);
-      else setBooking(result.booking ?? null);
+      try {
+        const result = await findBookingAction({ [mode]: query.trim() });
+        if (result.error) setError(result.error);
+        else setBooking(result.booking ?? null);
+      } catch {
+        setError("You're offline — this needs a connection.");
+      }
     });
   }
 

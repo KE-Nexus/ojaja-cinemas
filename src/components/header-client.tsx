@@ -126,14 +126,7 @@ export function HeaderClient({ session, cityName }: { session: SessionPayload | 
                 )}
               </AnimatePresence>
             </div>
-          ) : (
-            <Link
-              href="/register"
-              className="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white shadow-[0_4px_14px_-4px_rgba(0,0,0,0.35)] transition-colors hover:bg-brand-light active:brightness-95"
-            >
-              Sign up
-            </Link>
-          )}
+          ) : null}
         </div>
 
         <button className="md:hidden" onClick={() => setMobileOpen((v) => !v)} aria-label="Toggle menu">
@@ -195,11 +188,7 @@ export function HeaderClient({ session, cityName }: { session: SessionPayload | 
                     </button>
                   </form>
                 </>
-              ) : (
-                <Link href="/register" className="rounded-lg bg-brand px-3 py-2.5 text-sm font-medium text-white">
-                  Sign up
-                </Link>
-              )}
+              ) : null}
             </nav>
           </motion.div>
         )}
