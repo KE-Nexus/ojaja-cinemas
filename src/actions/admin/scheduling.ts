@@ -27,6 +27,54 @@ async function resolveBasePrice(priceCardId: string | null): Promise<number> {
   return Math.min(...lines.map((l) => l.ticketClass.defaultPrice));
 }
 
+/**
+ * A session occupies its screen for the film's real runtime, not just its start instant —
+ * two 2pm and 2:15pm sessions in the same room still clash if the first movie runs past
+ * 2:15pm. `endTime` is trusted when present (it already accounts for trailer/cleanup); when
+ * it's missing (older rows, or a duplicate that didn't carry it over) it's derived from the
+ * movie's own runtime plus this session's trailer/cleanup minutes.
+ */
+function effectiveEndTime(st: { startTime: Date; endTime: Date | null; trailerDurationMins: number; cleanupTimeMins: number }, movieRuntimeMins: number): Date {
+  if (st.endTime) return st.endTime;
+  const totalMins = movieRuntimeMins + st.trailerDurationMins + st.cleanupTimeMins;
+  return new Date(st.startTime.getTime() + totalMins * 60000);
+}
+
+function intervalsOverlap(aStart: Date, aEnd: Date, bStart: Date, bEnd: Date): boolean {
+  return aStart.getTime() < bEnd.getTime() && bStart.getTime() < aEnd.getTime();
+}
+
+function formatClashMoment(d: Date): string {
+  return d.toLocaleString("en-NG", { timeZone: "Africa/Lagos", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).replace(",", "");
+}
+
+/** Finds the first existing session in `auditoriumId` whose real screen-time overlaps `[newStart, newEnd)`, formatted to match the reference "will clash/overlap" message. */
+async function findScheduleClash(
+  auditoriumId: string,
+  newStart: Date,
+  newEnd: Date,
+  excludeShowtimeId?: string
+): Promise<string | null> {
+  const candidates = await prisma.showtime.findMany({
+    where: {
+      auditoriumId,
+      id: excludeShowtimeId ? { not: excludeShowtimeId } : undefined,
+      // Coarse pre-filter — a session starting more than a day away can never overlap a
+      // same-day booking — the exact check below is what actually decides it.
+      startTime: { gte: new Date(newStart.getTime() - 24 * 60 * 60 * 1000), lt: new Date(newEnd.getTime() + 24 * 60 * 60 * 1000) },
+    },
+    include: { movie: true },
+  });
+
+  for (const c of candidates) {
+    const cEnd = effectiveEndTime(c, c.movie.runtimeMins);
+    if (intervalsOverlap(newStart, newEnd, c.startTime, cEnd)) {
+      return `New session (start ${formatClashMoment(newStart)}, end ${formatClashMoment(newEnd)}) will clash/overlap with existing session "${c.movie.title}" (start ${formatClashMoment(c.startTime)}, end ${formatClashMoment(cEnd)}).`;
+    }
+  }
+  return null;
+}
+
 export async function createFilmSessionsAction(_prev: SessionFormState, formData: FormData): Promise<SessionFormState> {
   const session = await requireRole(["SUPERVISOR", "CIRCUIT_ADMIN"]);
   const claimError = await assertHasClaim(session.role, "CAN_UPDATE_SHOWTIMES");
@@ -109,9 +157,13 @@ export async function createFilmSessionsAction(_prev: SessionFormState, formData
     }
   }
 
+  const movie = await prisma.movie.findUnique({ where: { id: batchParsed.data.movieId } });
+  if (!movie) return { error: "Film not found." };
+
   for (const row of rows) {
-    const conflict = await prisma.showtime.findFirst({ where: { auditoriumId: row.auditoriumId, startTime: row.startTime } });
-    if (conflict) return { error: "One of these screens already has a session scheduled at that time." };
+    const newEnd = row.endTime ?? new Date(row.startTime.getTime() + (movie.runtimeMins + row.trailerDurationMins + row.cleanupTimeMins) * 60000);
+    const clash = await findScheduleClash(row.auditoriumId, row.startTime, newEnd);
+    if (clash) return { error: clash };
   }
 
   await prisma.$transaction(async (tx) => {
@@ -179,6 +231,9 @@ export async function updateFilmSessionAction(_prev: SessionFormState, formData:
   const status = formData.get("status") === "CLOSED" ? "CLOSED" : "OPEN";
   if (!movieId) return { error: "Select a film." };
 
+  const movie = await prisma.movie.findUnique({ where: { id: movieId } });
+  if (!movie) return { error: "Film not found." };
+
   const parsed = filmSessionRowSchema.safeParse({
     auditoriumId: formData.get("auditoriumId"),
     priceCardId: formData.get("priceCardId") || "",
@@ -205,10 +260,11 @@ export async function updateFilmSessionAction(_prev: SessionFormState, formData:
   const newStart = parseWatDateTimeLocal(parsed.data.startTime);
   if (newStart.getTime() <= Date.now()) return { error: "Choose a start time in the future." };
 
-  const conflict = await prisma.showtime.findFirst({
-    where: { auditoriumId: parsed.data.auditoriumId, startTime: newStart, id: { not: id } },
-  });
-  if (conflict) return { error: "This screen already has a session scheduled at that time." };
+  const newEnd = parsed.data.endTime
+    ? parseWatDateTimeLocal(parsed.data.endTime)
+    : new Date(newStart.getTime() + (movie.runtimeMins + parsed.data.trailerDurationMins + parsed.data.cleanupTimeMins) * 60000);
+  const clash = await findScheduleClash(parsed.data.auditoriumId, newStart, newEnd, id);
+  if (clash) return { error: clash };
 
   const basePrice = await resolveBasePrice(parsed.data.priceCardId || null);
 
@@ -254,10 +310,20 @@ export async function deleteDaySessionsAction(auditoriumIds: string[], dayStart:
   return count;
 }
 
-export async function duplicateDayAction(auditoriumIds: string[], fromDayStart: string, toDayStart: string) {
+/**
+ * All-or-nothing: if duplicating would clash any screen's real occupied time (movie runtime
+ * included, not just the raw start instant) with a session already on the target day, nothing
+ * is created and the specific clash is reported — matching the reference app's behavior of
+ * blocking the whole duplicate rather than silently dropping the conflicting session.
+ */
+export async function duplicateDayAction(
+  auditoriumIds: string[],
+  fromDayStart: string,
+  toDayStart: string
+): Promise<{ error?: string; created?: number }> {
   const session = await requireRole(["SUPERVISOR", "CIRCUIT_ADMIN"]);
   const claimError = await assertHasClaim(session.role, "CAN_UPDATE_SHOWTIMES");
-  if (claimError) throw new Error(claimError);
+  if (claimError) return { error: claimError };
 
   const fromStart = new Date(fromDayStart);
   const fromEnd = new Date(fromStart.getTime() + 24 * 60 * 60 * 1000);
@@ -266,36 +332,45 @@ export async function duplicateDayAction(auditoriumIds: string[], fromDayStart: 
 
   const sourceSessions = await prisma.showtime.findMany({
     where: { auditoriumId: { in: auditoriumIds }, startTime: { gte: fromStart, lt: fromEnd } },
-    include: { auditorium: true },
+    include: { auditorium: true, movie: true },
+  });
+  if (sourceSessions.length === 0) return { created: 0 };
+
+  const planned = sourceSessions.map((s) => {
+    const newStart = new Date(s.startTime.getTime() + dayOffsetMs);
+    const newEnd = new Date(effectiveEndTime(s, s.movie.runtimeMins).getTime() + dayOffsetMs);
+    return { source: s, newStart, newEnd };
   });
 
-  let created = 0;
-  for (const s of sourceSessions) {
-    const newStart = new Date(s.startTime.getTime() + dayOffsetMs);
-    const conflict = await prisma.showtime.findFirst({
-      where: { auditoriumId: s.auditoriumId, startTime: newStart },
-    });
-    if (conflict) continue;
-
-    await prisma.showtime.create({
-      data: {
-        movieId: s.movieId,
-        auditoriumId: s.auditoriumId,
-        startTime: newStart,
-        basePrice: s.basePrice,
-        language: s.language,
-        format: s.format,
-        salesOnPos: s.salesOnPos,
-        salesOnWeb: s.salesOnWeb,
-      },
-    });
-    await ensureFilmContract(s.movieId, s.auditorium.branchId);
-    created++;
+  for (const p of planned) {
+    const clash = await findScheduleClash(p.source.auditoriumId, p.newStart, p.newEnd);
+    if (clash) return { error: clash };
   }
 
-  await logAdminAction(session.sub, "CREATE", "Showtime", "bulk-duplicate", { created, from: fromDayStart, to: toDayStart });
+  for (const p of planned) {
+    await prisma.showtime.create({
+      data: {
+        movieId: p.source.movieId,
+        auditoriumId: p.source.auditoriumId,
+        priceCardId: p.source.priceCardId,
+        startTime: p.newStart,
+        endTime: p.newEnd,
+        basePrice: p.source.basePrice,
+        language: p.source.language,
+        format: p.source.format,
+        status: p.source.status,
+        trailerDurationMins: p.source.trailerDurationMins,
+        cleanupTimeMins: p.source.cleanupTimeMins,
+        salesOnPos: p.source.salesOnPos,
+        salesOnWeb: p.source.salesOnWeb,
+      },
+    });
+    await ensureFilmContract(p.source.movieId, p.source.auditorium.branchId);
+  }
+
+  await logAdminAction(session.sub, "CREATE", "Showtime", "bulk-duplicate", { created: planned.length, from: fromDayStart, to: toDayStart });
   revalidatePath("/admin/scheduling");
-  return created;
+  return { created: planned.length };
 }
 
 /**
@@ -331,7 +406,7 @@ export async function duplicateAcrossCircuitAction(
 
   const sourceSessions = await prisma.showtime.findMany({
     where: { auditoriumId: { in: fromAuditoriums.map((a) => a.id) }, startTime: { gte: fromStart, lt: fromEnd } },
-    include: { auditorium: true, priceCard: true },
+    include: { auditorium: true, priceCard: true, movie: true },
   });
 
   let created = 0;
@@ -345,10 +420,10 @@ export async function duplicateAcrossCircuitAction(
     }
 
     const newStart = new Date(s.startTime.getTime() + dayOffsetMs);
-    const newEnd = s.endTime ? new Date(s.endTime.getTime() + dayOffsetMs) : null;
+    const newEnd = new Date(effectiveEndTime(s, s.movie.runtimeMins).getTime() + dayOffsetMs);
 
-    const conflict = await prisma.showtime.findFirst({ where: { auditoriumId: targetAuditorium.id, startTime: newStart } });
-    if (conflict) {
+    const clash = await findScheduleClash(targetAuditorium.id, newStart, newEnd);
+    if (clash) {
       skipped++;
       continue;
     }

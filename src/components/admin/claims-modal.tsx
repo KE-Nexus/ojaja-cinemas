@@ -39,13 +39,15 @@ export function ClaimsModal({
       toast.error("Select at least one claim.");
       return;
     }
+    // Close right away rather than waiting on the round-trip — the save still runs in the
+    // background, it just doesn't hold the modal open while it does.
+    const ids = Array.from(selected);
+    onClose();
     startTransition(async () => {
       try {
-        const ids = Array.from(selected);
         if (mode === "add") await addClaimsToRoleAction(role, ids);
         else await removeClaimsFromRoleAction(role, ids);
         toast.success(mode === "add" ? "Claims added." : "Claims removed.");
-        onClose();
       } catch {
         toast.error("Something went wrong. Please try again.");
       }

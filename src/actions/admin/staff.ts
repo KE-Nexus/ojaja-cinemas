@@ -149,8 +149,19 @@ export async function transferStaffAction(_prev: FormState, formData: FormData):
   const parsed = transferStaffSchema.safeParse({ branchId: formData.get("branchId") });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Please check the form." };
 
+  // A POS session is tied to a single branch's till and inventory — moving staff away from
+  // it mid-session would leave that session pointing at a cinema they no longer belong to,
+  // and their next POS login would see the new branch's showtimes/items while checkout still
+  // validated against the old branch's open session. Require it closed (cash reconciled)
+  // first, rather than silently force-closing or letting the two go out of sync.
+  const openSession = await prisma.staffSession.findFirst({ where: { staffId: id, status: "OPEN" }, include: { branch: true } });
+  if (openSession) {
+    return { error: `This staff member has an open POS session at ${openSession.branch.name} — close it before transferring them.` };
+  }
+
   await prisma.user.update({ where: { id }, data: { branchId: parsed.data.branchId } });
   await logAdminAction(session.sub, "UPDATE", "User", id, { action: "transfer", branchId: parsed.data.branchId });
   revalidatePath("/admin/staff");
+  revalidatePath("/pos");
   return { success: true };
 }

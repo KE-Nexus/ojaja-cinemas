@@ -57,7 +57,12 @@ export function SchedulingToolbar({
     }
     startTransition(async () => {
       try {
-        const created = await duplicateDayAction(auditoriumIds, dayStartISO, new Date(targetDate).toISOString());
+        const result = await duplicateDayAction(auditoriumIds, dayStartISO, new Date(targetDate).toISOString());
+        if (result.error) {
+          toast.error(result.error);
+          return;
+        }
+        const created = result.created ?? 0;
         toast.success(`Duplicated ${created} session${created === 1 ? "" : "s"} to ${targetDate}.`);
         setDuplicateOpen(false);
         setTargetDate("");

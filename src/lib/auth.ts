@@ -56,9 +56,19 @@ export async function getSession(): Promise<SessionPayload | null> {
 
   try {
     const { payload } = await jwtVerify(token, getSecretKey());
+    const sub = payload.sub as string;
+
+    // Role is re-read from the DB on every request rather than trusted from the JWT — the
+    // token is only re-issued at login, so a role change (or a deactivation) made by an
+    // admin would otherwise sit inert until the staff member's next login, even though the
+    // admin UI already shows it as applied. This mirrors how branchId is handled in
+    // branch-scope.ts (never trusted from a claim, always read fresh).
+    const user = await prisma.user.findUnique({ where: { id: sub }, select: { role: true, isActive: true } });
+    if (!user || !user.isActive) return null;
+
     return {
-      sub: payload.sub as string,
-      role: payload.role as Role,
+      sub,
+      role: user.role,
       name: payload.name as string,
       email: payload.email as string,
     };
@@ -74,14 +84,12 @@ export async function getCurrentUser() {
 }
 
 export async function requireSession(): Promise<SessionPayload> {
-  const session = await getSession();
-  if (!session) redirect("/admin/login");
-
   // A signed session cookie can outlive its user record (e.g. after a database
-  // reset/reseed generates fresh ids) — bounce back to login instead of letting
-  // callers hit a foreign key violation on session.sub.
-  const user = await prisma.user.findUnique({ where: { id: session.sub }, select: { id: true } });
-  if (!user) {
+  // reset/reseed generates fresh ids) or outlive the account being deactivated —
+  // getSession() already returns null for both, so there's nothing left to check here
+  // beyond bouncing to login when it does.
+  const session = await getSession();
+  if (!session) {
     await destroySession();
     redirect("/admin/login");
   }

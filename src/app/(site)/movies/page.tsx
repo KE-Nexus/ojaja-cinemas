@@ -131,20 +131,42 @@ export default async function MoviesPage({
   }
 
   // Keyed by slug (not id) so it lines up with MovieCardData, which doesn't carry the DB id.
-  const earliestShowtimeBySlug = new Map<string, MovieShowtimeHint>();
+  // Every showtime for the day is kept (not just the earliest) so a card can list all of
+  // them, and the earliest one's instant drives both the sort order and the same-time
+  // grouping below.
+  const showtimesBySlug = new Map<string, MovieShowtimeHint[]>();
+  const earliestTimeBySlug = new Map<string, number>();
   for (const list of byMovieShowtimes.values()) {
-    const earliest = list[0];
-    earliestShowtimeBySlug.set(earliest.movie.slug, {
-      time: formatTime(earliest.startTime),
-      label: `${earliest.auditorium.name} · ${earliest.format}`,
-      href: `/booking/${earliest.id}/seats`,
-    });
+    const slug = list[0].movie.slug;
+    showtimesBySlug.set(
+      slug,
+      list.map((st) => ({
+        time: formatTime(st.startTime),
+        label: st.auditorium.name,
+        href: `/booking/${st.id}/seats`,
+      }))
+    );
+    earliestTimeBySlug.set(slug, list[0].startTime.getTime());
   }
 
   // Split so movies you can actually book right now don't sit interleaved with ones you
-  // can't yet (e.g. Coming Soon titles surfaced under the "All" filter).
-  const scheduledMovies = movies.filter((m) => earliestShowtimeBySlug.has(m.slug));
-  const unscheduledMovies = movies.filter((m) => !earliestShowtimeBySlug.has(m.slug));
+  // can't yet (e.g. Coming Soon titles surfaced under the "All" filter), then sort the
+  // bookable ones chronologically by their earliest session.
+  const scheduledMovies = movies
+    .filter((m) => earliestTimeBySlug.has(m.slug))
+    .sort((a, b) => earliestTimeBySlug.get(a.slug)! - earliestTimeBySlug.get(b.slug)!);
+  const unscheduledMovies = movies.filter((m) => !earliestTimeBySlug.has(m.slug));
+
+  // Movies whose earliest session starts at the exact same instant (same day, same
+  // clock time — just a different screen) are grouped so they render side by side on
+  // one row instead of wherever the grid's column count happens to place them.
+  const scheduledRows: { timeKey: number; movies: MovieCardData[] }[] = [];
+  for (const movie of scheduledMovies) {
+    const timeKey = earliestTimeBySlug.get(movie.slug)!;
+    const lastRow = scheduledRows[scheduledRows.length - 1];
+    if (lastRow && lastRow.timeKey === timeKey) lastRow.movies.push(movie);
+    else scheduledRows.push({ timeKey, movies: [movie] });
+  }
 
   function buildHref(params: Record<string, string | undefined>) {
     const sp = new URLSearchParams();
@@ -219,23 +241,32 @@ export default async function MoviesPage({
         </p>
       ) : (
         <div className="mx-auto mt-10 max-w-5xl px-4 sm:px-6 lg:px-10">
-          {scheduledMovies.length > 0 && (
+          {scheduledRows.length > 0 && (
             <div>
               {unscheduledMovies.length > 0 && <h2 className="mb-3 text-lg font-bold tracking-tight">Showing Now</h2>}
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                {scheduledMovies.map((movie) => (
-                  <MovieDetailCard key={movie.slug} movie={movie} showtime={earliestShowtimeBySlug.get(movie.slug) ?? null} />
+              <div className="space-y-6">
+                {scheduledRows.map((row) => (
+                  <div key={row.timeKey}>
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">
+                      {new Date(row.timeKey).toLocaleTimeString("en-NG", { hour: "numeric", minute: "2-digit", timeZone: "Africa/Lagos" })}
+                    </p>
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                      {row.movies.map((movie) => (
+                        <MovieDetailCard key={movie.slug} movie={movie} showtimes={showtimesBySlug.get(movie.slug) ?? []} />
+                      ))}
+                    </div>
+                  </div>
                 ))}
               </div>
             </div>
           )}
 
           {unscheduledMovies.length > 0 && (
-            <div className={scheduledMovies.length > 0 ? "mt-10" : undefined}>
-              {scheduledMovies.length > 0 && <h2 className="mb-3 text-lg font-bold tracking-tight">Coming Soon</h2>}
+            <div className={scheduledRows.length > 0 ? "mt-10" : undefined}>
+              {scheduledRows.length > 0 && <h2 className="mb-3 text-lg font-bold tracking-tight">Coming Soon</h2>}
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 {unscheduledMovies.map((movie) => (
-                  <MovieDetailCard key={movie.slug} movie={movie} showtime={null} />
+                  <MovieDetailCard key={movie.slug} movie={movie} showtimes={[]} />
                 ))}
               </div>
             </div>

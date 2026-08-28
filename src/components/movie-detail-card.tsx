@@ -7,9 +7,9 @@ import { formatRuntime } from "@/lib/format";
 import { cn } from "@/lib/cn";
 import type { MovieCardData } from "@/components/movie-card";
 
-export type MovieShowtimeHint = { time: string; label: string; href: string } | null;
+export type MovieShowtimeHint = { time: string; label: string; href: string };
 
-export function MovieDetailCard({ movie, showtime }: { movie: MovieCardData; showtime: MovieShowtimeHint }) {
+export function MovieDetailCard({ movie, showtimes }: { movie: MovieCardData; showtimes: MovieShowtimeHint[] }) {
   const [expanded, setExpanded] = useState(false);
   const year = movie.releaseDate ? new Date(movie.releaseDate).getFullYear() : null;
 
@@ -47,15 +47,18 @@ export function MovieDetailCard({ movie, showtime }: { movie: MovieCardData; sho
           </p>
         )}
 
-        {showtime && (
-          <div className="mt-3">
-            <Link
-              href={showtime.href}
-              className="inline-flex items-center gap-2 rounded-lg bg-surface-2 px-3 py-1.5 text-xs font-semibold transition-colors hover:bg-brand/20"
-            >
-              <span>{showtime.time}</span>
-              <span className="text-muted">{showtime.label}</span>
-            </Link>
+        {showtimes.length > 0 && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {showtimes.map((st) => (
+              <Link
+                key={st.href}
+                href={st.href}
+                className="inline-flex items-center gap-2 rounded-lg bg-surface-2 px-3 py-1.5 text-xs font-semibold transition-colors hover:bg-brand/20"
+              >
+                <span>{st.time}</span>
+                <span className="text-muted">{st.label}</span>
+              </Link>
+            ))}
           </div>
         )}
       </div>
