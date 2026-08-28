@@ -16,6 +16,7 @@ export function LogoutButton({
   "aria-label"?: string;
 }) {
   const [isPending, startTransition] = useTransition();
+  const [, startNavTransition] = useTransition();
   const [phase, setPhase] = useState<"idle" | "success" | "error">("idle");
   const router = useRouter();
 
@@ -24,7 +25,10 @@ export function LogoutButton({
       try {
         const result = await logoutAction();
         setPhase("success");
-        setTimeout(() => router.push(result.redirectTo), 600);
+        // Navigating inside a transition (rather than a fixed setTimeout) keeps this page —
+        // overlay included — mounted and visible until the destination is actually ready to
+        // show, instead of guessing a delay and risking a blank flash if it loads slower.
+        startNavTransition(() => router.push(result.redirectTo));
       } catch {
         setPhase("error");
       }

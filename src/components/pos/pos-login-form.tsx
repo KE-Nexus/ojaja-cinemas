@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useState } from "react";
+import { useActionState, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { Delete, LogIn } from "lucide-react";
@@ -18,6 +18,7 @@ export function PosLoginForm() {
   const formRef = useRef<HTMLFormElement>(null);
   const [phase, setPhase] = useState<"idle" | "success" | "error">("idle");
   const [prevState, setPrevState] = useState(state);
+  const [, startNavTransition] = useTransition();
   const router = useRouter();
 
   if (prevState !== state) {
@@ -27,12 +28,14 @@ export function PosLoginForm() {
   }
 
   useEffect(() => {
+    // Navigating inside a transition (rather than a fixed setTimeout) keeps this page —
+    // overlay included — mounted and visible until the destination is actually ready to
+    // show, instead of guessing a delay and risking a blank flash if it loads slower.
     if (phase === "success" && state?.redirectTo) {
       const redirectTo = state.redirectTo;
-      const t = setTimeout(() => router.push(redirectTo), 700);
-      return () => clearTimeout(t);
+      startNavTransition(() => router.push(redirectTo));
     }
-  }, [phase, state, router]);
+  }, [phase, state, router, startNavTransition]);
 
   const overlayStatus: AuthStatus | null = isPending ? "pending" : phase === "success" ? "success" : phase === "error" ? "error" : null;
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { loginAction, type FormState } from "@/actions/auth";
@@ -12,6 +12,7 @@ export function LoginForm() {
   const [state, formAction, isPending] = useActionState<FormState, FormData>(loginAction, null);
   const [phase, setPhase] = useState<"idle" | "success" | "error">("idle");
   const [prevState, setPrevState] = useState(state);
+  const [, startNavTransition] = useTransition();
   const router = useRouter();
 
   if (prevState !== state) {
@@ -21,12 +22,14 @@ export function LoginForm() {
   }
 
   useEffect(() => {
+    // Navigating inside a transition (rather than a fixed setTimeout) keeps this page —
+    // overlay included — mounted and visible until the destination is actually ready to
+    // show, instead of guessing a delay and risking a blank flash if it loads slower.
     if (phase === "success" && state?.redirectTo) {
       const redirectTo = state.redirectTo;
-      const t = setTimeout(() => router.push(redirectTo), 700);
-      return () => clearTimeout(t);
+      startNavTransition(() => router.push(redirectTo));
     }
-  }, [phase, state, router]);
+  }, [phase, state, router, startNavTransition]);
 
   const overlayStatus: AuthStatus | null = isPending ? "pending" : phase === "success" ? "success" : phase === "error" ? "error" : null;
 
