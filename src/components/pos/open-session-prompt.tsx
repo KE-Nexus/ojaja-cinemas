@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { PlayCircle, LogOut } from "lucide-react";
 import { openStaffSessionAction } from "@/actions/admin/staff-sessions";
-import { logoutAction } from "@/actions/auth";
+import { LogoutButton } from "@/components/logout-button";
 
 export function OpenSessionPrompt({ staffName, branchName }: { staffName: string; branchName: string }) {
   const [isPending, startTransition] = useTransition();
@@ -40,11 +40,9 @@ export function OpenSessionPrompt({ staffName, branchName }: { staffName: string
           <PlayCircle size={18} /> {isPending ? "Opening..." : "Open Session"}
         </button>
 
-        <form action={logoutAction} className="mt-3">
-          <button type="submit" className="flex w-full items-center justify-center gap-1.5 py-2 text-xs text-muted hover:text-foreground">
-            <LogOut size={13} /> Log off
-          </button>
-        </form>
+        <LogoutButton className="mt-3 flex w-full items-center justify-center gap-1.5 py-2 text-xs text-muted hover:text-foreground">
+          <LogOut size={13} /> Log off
+        </LogoutButton>
       </div>
     </div>
   );

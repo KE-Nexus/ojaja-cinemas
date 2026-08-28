@@ -14,7 +14,7 @@ import {
 import { loginSchema, registerSchema } from "@/lib/validation";
 import { notificationProvider } from "@/lib/providers/notification";
 
-export type FormState = { error?: string; fieldErrors?: Record<string, string> } | null;
+export type FormState = { error?: string; fieldErrors?: Record<string, string>; success?: boolean; redirectTo?: string } | null;
 
 export async function registerAction(_prev: FormState, formData: FormData): Promise<FormState> {
   const parsed = registerSchema.safeParse({
@@ -72,13 +72,15 @@ export async function loginAction(_prev: FormState, formData: FormData): Promise
   await createSession({ sub: user.id, role: user.role, name: user.name, email: user.email });
   // Clears every cached route so a stale render from a previous session/role never leaks through.
   revalidatePath("/", "layout");
-  redirect(user.role === "CUSTOMER" ? "/account" : "/admin");
+  // Returned instead of redirect()'d — the caller shows a brief success state before
+  // navigating itself, which a server-side redirect would cut off mid-render.
+  return { success: true, redirectTo: user.role === "CUSTOMER" ? "/account" : "/admin" };
 }
 
-export async function logoutAction() {
+export async function logoutAction(): Promise<{ redirectTo: string }> {
   await destroySession();
   revalidatePath("/", "layout");
-  redirect("/");
+  return { redirectTo: "/" };
 }
 
 export async function requestPasswordResetAction(_prev: FormState, formData: FormData): Promise<FormState> {

@@ -1,45 +1,74 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { loginAction, type FormState } from "@/actions/auth";
 import { Button } from "@/components/ui/button";
 import { Input, Label, FieldError } from "@/components/ui/input";
+import { AuthStatusOverlay, type AuthStatus } from "@/components/auth-status-overlay";
 
 export function LoginForm() {
   const [state, formAction, isPending] = useActionState<FormState, FormData>(loginAction, null);
+  const [phase, setPhase] = useState<"idle" | "success" | "error">("idle");
+  const [prevState, setPrevState] = useState(state);
+  const router = useRouter();
+
+  if (prevState !== state) {
+    setPrevState(state);
+    if (state?.success && state.redirectTo) setPhase("success");
+    else if (state?.error) setPhase("error");
+  }
+
+  useEffect(() => {
+    if (phase === "success" && state?.redirectTo) {
+      const redirectTo = state.redirectTo;
+      const t = setTimeout(() => router.push(redirectTo), 700);
+      return () => clearTimeout(t);
+    }
+  }, [phase, state, router]);
+
+  const overlayStatus: AuthStatus | null = isPending ? "pending" : phase === "success" ? "success" : phase === "error" ? "error" : null;
 
   return (
-    <form action={formAction} className="space-y-4">
-      <div>
-        <Label htmlFor="email">Email</Label>
-        <Input id="email" name="email" type="email" required autoComplete="email" />
-        <FieldError>{state?.fieldErrors?.email}</FieldError>
-      </div>
-      <div>
-        <Label htmlFor="password">Password</Label>
-        <Input id="password" name="password" type="password" required autoComplete="current-password" />
-        <FieldError>{state?.fieldErrors?.password}</FieldError>
-      </div>
+    <>
+      <form action={formAction} className="space-y-4">
+        <div>
+          <Label htmlFor="email">Email</Label>
+          <Input id="email" name="email" type="email" required autoComplete="email" />
+          <FieldError>{state?.fieldErrors?.email}</FieldError>
+        </div>
+        <div>
+          <Label htmlFor="password">Password</Label>
+          <Input id="password" name="password" type="password" required autoComplete="current-password" />
+          <FieldError>{state?.fieldErrors?.password}</FieldError>
+        </div>
 
-      <div className="flex justify-end">
-        <Link href="/forgot-password" className="text-xs text-brand-light hover:underline">
-          Forgot password?
-        </Link>
-      </div>
+        <div className="flex justify-end">
+          <Link href="/forgot-password" className="text-xs text-brand-light hover:underline">
+            Forgot password?
+          </Link>
+        </div>
 
-      {state?.error && <p className="text-sm text-danger">{state.error}</p>}
+        <Button type="submit" className="w-full" disabled={isPending}>
+          {isPending ? "Signing in..." : "Log In"}
+        </Button>
 
-      <Button type="submit" className="w-full" disabled={isPending}>
-        {isPending ? "Signing in..." : "Log In"}
-      </Button>
+        <p className="text-center text-sm text-muted">
+          Don&rsquo;t have an account?{" "}
+          <Link href="/register" className="text-brand-light hover:underline">
+            Sign up
+          </Link>
+        </p>
+      </form>
 
-      <p className="text-center text-sm text-muted">
-        Don&rsquo;t have an account?{" "}
-        <Link href="/register" className="text-brand-light hover:underline">
-          Sign up
-        </Link>
-      </p>
-    </form>
+      <AuthStatusOverlay
+        status={overlayStatus}
+        pendingLabel="Signing in..."
+        successLabel="Welcome back!"
+        errorLabel={state?.error}
+        onDismiss={() => setPhase("idle")}
+      />
+    </>
   );
 }

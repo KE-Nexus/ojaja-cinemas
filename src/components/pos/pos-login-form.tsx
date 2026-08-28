@@ -1,9 +1,11 @@
 "use client";
 
-import { useActionState, useRef, useState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { Delete, LogIn } from "lucide-react";
 import { posLoginAction, type PosLoginState } from "@/actions/pos/auth";
+import { AuthStatusOverlay, type AuthStatus } from "@/components/auth-status-overlay";
 import { cn } from "@/lib/cn";
 
 const KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "back", "0", "enter"];
@@ -14,6 +16,25 @@ export function PosLoginForm() {
   const [pin, setPin] = useState("");
   const [activeField, setActiveField] = useState<"staffNumber" | "pin">("staffNumber");
   const formRef = useRef<HTMLFormElement>(null);
+  const [phase, setPhase] = useState<"idle" | "success" | "error">("idle");
+  const [prevState, setPrevState] = useState(state);
+  const router = useRouter();
+
+  if (prevState !== state) {
+    setPrevState(state);
+    if (state?.success && state.redirectTo) setPhase("success");
+    else if (state?.error) setPhase("error");
+  }
+
+  useEffect(() => {
+    if (phase === "success" && state?.redirectTo) {
+      const redirectTo = state.redirectTo;
+      const t = setTimeout(() => router.push(redirectTo), 700);
+      return () => clearTimeout(t);
+    }
+  }, [phase, state, router]);
+
+  const overlayStatus: AuthStatus | null = isPending ? "pending" : phase === "success" ? "success" : phase === "error" ? "error" : null;
 
   function press(key: string) {
     const set = activeField === "staffNumber" ? setStaffNumber : setPin;
@@ -28,6 +49,13 @@ export function PosLoginForm() {
 
   return (
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[radial-gradient(ellipse_80%_60%_at_50%_-10%,rgba(194,44,201,0.35),transparent),radial-gradient(ellipse_60%_50%_at_100%_100%,rgba(56,224,255,0.15),transparent)] bg-black px-4 py-10">
+      <AuthStatusOverlay
+        status={overlayStatus}
+        pendingLabel="Signing in..."
+        successLabel="Welcome back!"
+        errorLabel={state?.error}
+        onDismiss={() => setPhase("idle")}
+      />
       <div className="bg-grid pointer-events-none absolute inset-0 opacity-40" />
 
       <div className="glass glow-brand relative z-10 w-full max-w-sm rounded-3xl border border-white/10 p-8">
@@ -77,8 +105,6 @@ export function PosLoginForm() {
               )}
             />
           </div>
-
-          {state?.error && <p className="text-center text-sm text-danger">{state.error}</p>}
 
           <div className="grid grid-cols-3 gap-2.5 pt-2">
             {KEYS.map((key) => (

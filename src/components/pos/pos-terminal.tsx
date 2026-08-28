@@ -30,6 +30,7 @@ import {
 import { posCheckoutAction } from "@/actions/pos/checkout";
 import { openCashDrawerAction, getShowtimesForDateAction } from "@/actions/pos/tools";
 import { logoutAction } from "@/actions/auth";
+import { AuthStatusOverlay, type AuthStatus } from "@/components/auth-status-overlay";
 import { formatNaira } from "@/lib/format";
 import { printPosReceipt } from "@/lib/pos-receipt";
 import { cn } from "@/lib/cn";
@@ -132,6 +133,9 @@ export function PosTerminal({
   const [queuedSales, setQueuedSales] = useState<QueuedSale[]>([]);
   const [pendingActions, setPendingActions] = useState<PendingAction[]>([]);
   const [showModeModal, setShowModeModal] = useState(false);
+  // Separate from `isPending` — that transition is shared with checkout/cash-drawer/etc.,
+  // and would flash "Signing out..." during unrelated actions if reused here.
+  const [logoutPhase, setLogoutPhase] = useState<"idle" | "pending" | "success" | "error">("idle");
   const [isPending, startTransition] = useTransition();
   const [isDatePending, startDateTransition] = useTransition();
   const dateTabRef = useRef<HTMLButtonElement>(null);
@@ -205,7 +209,8 @@ export function PosTerminal({
           continue;
         }
         if (a.kind === "logOff") {
-          await logoutAction();
+          const result = await logoutAction();
+          router.push(result.redirectTo);
           return;
         }
       }
@@ -356,8 +361,15 @@ export function PosTerminal({
       toast.success("Offline — you'll be logged off automatically once you're back online.");
       return;
     }
+    setLogoutPhase("pending");
     startTransition(async () => {
-      await logoutAction();
+      try {
+        const result = await logoutAction();
+        setLogoutPhase("success");
+        setTimeout(() => router.push(result.redirectTo), 600);
+      } catch {
+        setLogoutPhase("error");
+      }
     });
   }
 
@@ -814,6 +826,14 @@ export function PosTerminal({
           </button>
         </PosModalShell>
       )}
+
+      <AuthStatusOverlay
+        status={logoutPhase === "idle" ? null : (logoutPhase as AuthStatus)}
+        pendingLabel="Signing out..."
+        successLabel="Catch you later!"
+        errorLabel="Something went wrong signing you out. Please try again."
+        onDismiss={() => setLogoutPhase("idle")}
+      />
     </div>
   );
 }

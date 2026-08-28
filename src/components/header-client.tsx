@@ -19,8 +19,8 @@ import {
   PartyPopper,
   Mail,
 } from "lucide-react";
-import { logoutAction } from "@/actions/auth";
 import { clearLocationAction } from "@/actions/location";
+import { LogoutButton } from "@/components/logout-button";
 import type { SessionPayload } from "@/lib/roles";
 import { cn } from "@/lib/cn";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -114,14 +114,9 @@ export function HeaderClient({ session, cityName }: { session: SessionPayload | 
                     >
                       <Ticket size={15} /> My Bookings
                     </Link>
-                    <form action={logoutAction}>
-                      <button
-                        type="submit"
-                        className="flex w-full items-center gap-2 border-t border-border px-4 py-2.5 text-left text-sm text-danger hover:bg-white/5"
-                      >
-                        <LogOut size={15} /> Sign out
-                      </button>
-                    </form>
+                    <LogoutButton className="flex w-full items-center gap-2 border-t border-border px-4 py-2.5 text-left text-sm text-danger hover:bg-white/5">
+                      <LogOut size={15} /> Sign out
+                    </LogoutButton>
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -182,11 +177,9 @@ export function HeaderClient({ session, cityName }: { session: SessionPayload | 
                   <Link href="/account" className="rounded-lg px-3 py-2.5 text-sm font-medium hover:bg-white/5">
                     My Bookings
                   </Link>
-                  <form action={logoutAction}>
-                    <button type="submit" className="w-full rounded-lg px-3 py-2.5 text-left text-sm text-danger hover:bg-white/5">
-                      Sign out
-                    </button>
-                  </form>
+                  <LogoutButton className="w-full rounded-lg px-3 py-2.5 text-left text-sm text-danger hover:bg-white/5">
+                    Sign out
+                  </LogoutButton>
                 </>
               ) : null}
             </nav>

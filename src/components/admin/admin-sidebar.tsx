@@ -38,7 +38,7 @@ import {
   CreditCard,
   Boxes,
 } from "lucide-react";
-import { logoutAction } from "@/actions/auth";
+import { LogoutButton } from "@/components/logout-button";
 import type { Role } from "@prisma/client";
 import type { ClaimKey } from "@/lib/claims";
 import { cn } from "@/lib/cn";
@@ -225,11 +225,9 @@ export function AdminSidebar({ name, role, grantedClaims }: { name: string; role
             <p className="truncate text-sm font-medium">{name}</p>
             <p className="text-xs capitalize text-muted">{role.replace("_", " ").toLowerCase()}</p>
           </div>
-          <form action={logoutAction}>
-            <button type="submit" className="text-muted hover:text-danger" aria-label="Sign out">
-              <LogOut size={16} />
-            </button>
-          </form>
+          <LogoutButton className="text-muted hover:text-danger" aria-label="Sign out">
+            <LogOut size={16} />
+          </LogoutButton>
         </div>
       </div>
     </aside>

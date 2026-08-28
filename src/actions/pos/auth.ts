@@ -1,11 +1,10 @@
 "use server";
 
-import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { createSession, verifyPassword } from "@/lib/auth";
 import { isStaffRole } from "@/lib/roles";
 
-export type PosLoginState = { error?: string } | null;
+export type PosLoginState = { error?: string; success?: boolean; redirectTo?: string } | null;
 
 export async function posLoginAction(_prev: PosLoginState, formData: FormData): Promise<PosLoginState> {
   const staffNumber = String(formData.get("staffNumber") ?? "").trim();
@@ -23,5 +22,7 @@ export async function posLoginAction(_prev: PosLoginState, formData: FormData): 
   if (!valid) return { error: "Invalid user number or PIN." };
 
   await createSession({ sub: user.id, role: user.role, name: user.name, email: user.email });
-  redirect("/pos");
+  // Returned instead of redirect()'d — the form shows a brief success state before
+  // navigating itself, which a server-side redirect would cut off mid-render.
+  return { success: true, redirectTo: "/pos" };
 }
