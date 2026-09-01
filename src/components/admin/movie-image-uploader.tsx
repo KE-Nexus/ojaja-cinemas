@@ -35,7 +35,7 @@ export function MovieImageUploader({
         )}
       >
         {src ? (
-          <Image src={src} alt="" fill unoptimized className="object-cover" />
+          <Image src={src} alt="" fill unoptimized referrerPolicy="no-referrer" className="object-cover" />
         ) : (
           <span className="px-3 text-center text-xs text-muted">No {shape} yet</span>
         )}

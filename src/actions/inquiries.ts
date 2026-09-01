@@ -38,6 +38,17 @@ export async function submitSpaceBookingAction(_prev: FormState, formData: FormD
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Please check the form." };
 
+  // Private events need at least a week's lead time to prepare — computed against WAT's
+  // calendar day (a fixed UTC+1, no DST) rather than the server's own ambient timezone, so
+  // this doesn't silently shift by an hour depending on where the app happens to be deployed.
+  const nowWat = new Date(Date.now() + 60 * 60 * 1000);
+  const todayWat = new Date(Date.UTC(nowWat.getUTCFullYear(), nowWat.getUTCMonth(), nowWat.getUTCDate()));
+  const earliestAllowed = new Date(todayWat.getTime() + 7 * 24 * 60 * 60 * 1000);
+  const requestedDate = new Date(`${parsed.data.eventDate}T00:00:00Z`);
+  if (Number.isNaN(requestedDate.getTime()) || requestedDate.getTime() < earliestAllowed.getTime()) {
+    return { error: "Please choose a date at least 7 days from today so our events team has time to prepare." };
+  }
+
   await prisma.spaceBookingRequest.create({
     data: {
       name: parsed.data.name,

@@ -19,7 +19,7 @@ export function SyncMoviesButton() {
           try {
             const { imported, updated, flipped } = await syncLatestMoviesAction();
             toast.success(
-              `Synced with TMDB — ${imported} added, ${updated} refreshed${flipped ? `, ${flipped} moved to Now Showing` : ""}.`
+              `Synced with every.film — ${imported} added, ${updated} refreshed${flipped ? `, ${flipped} moved to Now Showing` : ""}.`
             );
           } catch {
             toast.error("Sync failed. Please try again.");

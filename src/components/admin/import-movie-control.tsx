@@ -7,11 +7,11 @@ import { toast } from "sonner";
 import { importMovieAction } from "@/actions/admin/movie-import";
 
 export function ImportMovieControl({
-  tmdbId,
+  everyFilmId,
   defaultStatus,
   existingMovieId,
 }: {
-  tmdbId: number;
+  everyFilmId: string;
   defaultStatus: "NOW_SHOWING" | "COMING_SOON";
   existingMovieId?: string;
 }) {
@@ -49,7 +49,7 @@ export function ImportMovieControl({
         onClick={() =>
           startTransition(async () => {
             try {
-              const { movieId } = await importMovieAction(tmdbId, status);
+              const { movieId } = await importMovieAction(everyFilmId, status);
               setImportedId(movieId);
               toast.success("Added to catalog");
             } catch {

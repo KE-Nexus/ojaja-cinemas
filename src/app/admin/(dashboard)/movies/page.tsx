@@ -95,7 +95,7 @@ export default async function AdminMoviesPage({
                   <td className="p-3">
                     <div className="flex items-center gap-3">
                       <div className="relative h-14 w-10 shrink-0 overflow-hidden rounded">
-                        <Image src={m.posterUrl} alt={m.title} fill unoptimized className="object-cover" />
+                        <Image src={m.posterUrl} alt={m.title} fill unoptimized referrerPolicy="no-referrer" className="object-cover" />
                       </div>
                       <span className="font-medium">{m.title}</span>
                     </div>

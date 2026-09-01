@@ -18,7 +18,7 @@ export default async function SeatSelectionPage({ params }: { params: Promise<{ 
     <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
       <div className="mb-8 flex items-center gap-4 rounded-xl border border-border bg-surface p-4">
         <div className="relative h-20 w-14 shrink-0 overflow-hidden rounded-md">
-          <Image src={showtime.movie.posterUrl} alt={showtime.movie.title} fill unoptimized className="object-cover" />
+          <Image src={showtime.movie.posterUrl} alt={showtime.movie.title} fill unoptimized referrerPolicy="no-referrer" className="object-cover" />
         </div>
         <div>
           <h1 className="font-display text-2xl tracking-wide">{showtime.movie.title}</h1>

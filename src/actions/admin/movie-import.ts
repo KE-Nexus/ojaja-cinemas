@@ -3,15 +3,15 @@
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth";
 import { logAdminAction } from "@/lib/audit";
-import { importMovieByTmdbId, syncLatestMovies, type SyncSummary } from "@/lib/movie-sync";
+import { importMovieByEveryFilmId, syncLatestMovies, type SyncSummary } from "@/lib/movie-sync";
 
-export async function importMovieAction(tmdbId: number, status: "NOW_SHOWING" | "COMING_SOON") {
+export async function importMovieAction(everyFilmId: string, status: "NOW_SHOWING" | "COMING_SOON") {
   const session = await requireRole(["SUPERVISOR", "CIRCUIT_ADMIN", "ACCOUNTANT"]);
-  const { movie, created } = await importMovieByTmdbId(tmdbId, status);
+  const { movie, created } = await importMovieByEveryFilmId(everyFilmId, status);
 
   await logAdminAction(session.sub, created ? "CREATE" : "UPDATE", "Movie", movie.id, {
     title: movie.title,
-    source: "tmdb-import",
+    source: "every-film-import",
   });
   revalidatePath("/admin/movies");
   revalidatePath("/admin/movies/import");
@@ -22,7 +22,7 @@ export async function syncLatestMoviesAction(): Promise<SyncSummary> {
   const session = await requireRole(["SUPERVISOR", "CIRCUIT_ADMIN", "ACCOUNTANT"]);
   const summary = await syncLatestMovies();
 
-  await logAdminAction(session.sub, "UPDATE", "Movie", "bulk-tmdb-sync", summary);
+  await logAdminAction(session.sub, "UPDATE", "Movie", "bulk-every-film-sync", summary);
   revalidatePath("/admin/movies");
   revalidatePath("/admin/movies/import");
   return summary;

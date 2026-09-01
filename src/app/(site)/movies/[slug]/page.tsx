@@ -78,7 +78,7 @@ export default async function MovieDetailPage({ params }: { params: Promise<{ sl
 
       <section className="relative flex h-[70vh] max-h-[720px] min-h-[440px] items-end overflow-hidden">
         <div className="absolute inset-0">
-          <Image src={movie.backdropUrl ?? movie.posterUrl} alt="" fill unoptimized priority className="object-cover" />
+          <Image src={movie.backdropUrl ?? movie.posterUrl} alt="" fill unoptimized referrerPolicy="no-referrer" priority className="object-cover" />
           <div className="absolute inset-0 bg-gradient-to-t from-background via-background/50 to-transparent" />
           <div className="absolute inset-0 bg-gradient-to-r from-background/95 via-background/10 to-transparent" />
         </div>

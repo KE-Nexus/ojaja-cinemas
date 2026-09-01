@@ -64,7 +64,7 @@ export function HeroCarousel({ movies }: { movies: HeroMovie[] }) {
             transition={{ duration: 1.2, ease: [0.16, 1, 0.3, 1] }}
             className="absolute inset-0"
           >
-            <Image src={hero.backdropUrl ?? hero.posterUrl} alt="" fill unoptimized priority className="object-cover" />
+            <Image src={hero.backdropUrl ?? hero.posterUrl} alt="" fill unoptimized referrerPolicy="no-referrer" priority className="object-cover" />
           </motion.div>
         </AnimatePresence>
         <div className="absolute inset-0 bg-gradient-to-t from-background via-background/40 to-transparent" />

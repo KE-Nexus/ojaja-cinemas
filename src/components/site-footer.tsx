@@ -56,11 +56,9 @@ export function SiteFooter() {
           <p>&copy; {new Date().getFullYear()} OJAJA Cinemas. All rights reserved.</p>
           <p>Prices shown in Nigerian Naira (₦). Showtimes in West Africa Time (WAT).</p>
         </div>
-        {process.env.TMDB_API_KEY && (
-          <p className="mt-4 text-center text-[11px] text-muted/70">
-            This product uses the TMDB API but is not endorsed or certified by TMDB.
-          </p>
-        )}
+        <p className="mt-4 text-center text-[11px] text-muted/70">
+          Movie data provided by <a href="https://every.film" target="_blank" rel="noopener noreferrer" className="hover:text-muted">every.film</a>, licensed CC BY-SA 4.0.
+        </p>
       </div>
     </footer>
   );

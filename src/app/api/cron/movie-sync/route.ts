@@ -1,9 +1,8 @@
 import { NextResponse } from "next/server";
-import { isTmdbConfigured } from "@/lib/tmdb";
 import { syncLatestMovies } from "@/lib/movie-sync";
 
 /**
- * Auto-updates the catalog with TMDB's current now-playing/upcoming titles and flips
+ * Auto-updates the catalog with every.film's current now-playing/upcoming titles and flips
  * stale Coming Soon entries to Now Showing once their release date has passed.
  *
  * Not wired to a scheduler by itself — point any external cron (Vercel Cron, a Windows
@@ -17,10 +16,6 @@ export async function GET(request: Request) {
     if (auth !== `Bearer ${secret}`) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-  }
-
-  if (!isTmdbConfigured()) {
-    return NextResponse.json({ error: "TMDB_API_KEY is not set" }, { status: 400 });
   }
 
   const summary = await syncLatestMovies();

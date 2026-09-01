@@ -18,7 +18,7 @@ export function CinemaHome({ branch, scheduledMovies }: { branch: CinemaHomeBran
       <section className="relative overflow-hidden bg-surface">
         {branch.useFilmSchedule && scheduledMovies.length > 0 ? (
           <div className="relative h-72 sm:h-96">
-            <Image src={scheduledMovies[0].backdropUrl ?? scheduledMovies[0].posterUrl} alt="" fill unoptimized className="object-cover" priority />
+            <Image src={scheduledMovies[0].backdropUrl ?? scheduledMovies[0].posterUrl} alt="" fill unoptimized referrerPolicy="no-referrer" className="object-cover" priority />
             <div className="absolute inset-0 bg-gradient-to-t from-surface via-surface/50 to-transparent" />
           </div>
         ) : promotionalImages.length > 0 ? (
@@ -62,7 +62,7 @@ export function CinemaHome({ branch, scheduledMovies }: { branch: CinemaHomeBran
                   {scheduledMovies.map((m) => (
                     <Link key={m.id} href={`/movies/${m.slug}`} className="group">
                       <div className="relative aspect-[2/3] overflow-hidden rounded-lg bg-surface-2">
-                        <Image src={m.posterUrl} alt={m.title} fill unoptimized className="object-cover transition-transform group-hover:scale-105" />
+                        <Image src={m.posterUrl} alt={m.title} fill unoptimized referrerPolicy="no-referrer" className="object-cover transition-transform group-hover:scale-105" />
                       </div>
                       <p className="mt-1.5 line-clamp-1 text-sm font-medium">{m.title}</p>
                       <p className="text-xs text-muted">{formatRuntime(m.runtimeMins)}</p>

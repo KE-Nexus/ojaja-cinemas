@@ -260,7 +260,7 @@ model Seat {
 
 model Movie {
   id             String      @id @default(cuid())
-  tmdbId         Int?        @unique
+  everyFilmId    String?     @unique
   title          String
   slug           String      @unique
   synopsis       String

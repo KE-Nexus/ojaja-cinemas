@@ -526,7 +526,7 @@ export function PosTerminal({
                         )}
                       >
                         <div className="relative h-24 w-full bg-white/5">
-                          <Image src={st.posterUrl} alt={st.movieTitle} fill unoptimized className="object-cover" />
+                          <Image src={st.posterUrl} alt={st.movieTitle} fill unoptimized referrerPolicy="no-referrer" className="object-cover" />
                         </div>
                         <div className="p-2.5">
                           <p className="line-clamp-1 text-sm font-semibold">{st.movieTitle}</p>

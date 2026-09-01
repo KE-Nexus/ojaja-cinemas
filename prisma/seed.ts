@@ -1,6 +1,6 @@
 import { PrismaClient, SeatCategory, type Role } from "@prisma/client";
 import bcrypt from "bcryptjs";
-import { isTmdbConfigured, fetchNowPlaying, fetchUpcoming, type ImportedMovie } from "../src/lib/tmdb";
+import { fetchNowPlaying, fetchUpcoming, type ImportedMovie } from "../src/lib/every-film";
 import { CLAIM_DEFINITIONS, DEFAULT_ROLE_CLAIMS } from "../src/lib/claims";
 
 const prisma = new PrismaClient();
@@ -21,7 +21,7 @@ function slugify(title: string) {
 }
 
 type SeedMovie = {
-  tmdbId: number | null;
+  everyFilmId: string | null;
   slug: string;
   title: string;
   synopsis: string;
@@ -39,59 +39,55 @@ type SeedMovie = {
 };
 
 async function buildMovieSeedData(): Promise<SeedMovie[]> {
-  if (isTmdbConfigured()) {
-    console.log("TMDB_API_KEY detected — importing real now-showing/upcoming movies from TMDB...");
-    try {
-      const [nowPlaying, upcomingRaw] = await Promise.all([fetchNowPlaying(10), fetchUpcoming(16)]);
-      // TMDB's "upcoming" list occasionally includes re-releases of classics whose resolved
-      // release date still lands in the past — never seed those as Coming Soon.
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const upcoming = upcomingRaw.filter((m) => new Date(m.releaseDate) >= today).slice(0, 8);
-      const usedSlugs = new Set<string>();
+  console.log("Importing real now-showing/upcoming movies from every.film...");
+  try {
+    const [nowPlaying, upcomingRaw] = await Promise.all([fetchNowPlaying(10), fetchUpcoming(16)]);
+    // every.film's "upcoming" list occasionally includes re-releases of classics whose
+    // resolved release date still lands in the past — never seed those as Coming Soon.
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const upcoming = upcomingRaw.filter((m) => new Date(m.releaseDate) >= today).slice(0, 8);
+    const usedSlugs = new Set<string>();
 
-      const toSeedMovie = (m: ImportedMovie, status: "NOW_SHOWING" | "COMING_SOON"): SeedMovie => {
-        const base = slugify(m.title);
-        let slug = base;
-        let n = 1;
-        while (usedSlugs.has(slug)) slug = `${base}-${++n}`;
-        usedSlugs.add(slug);
+    const toSeedMovie = (m: ImportedMovie, status: "NOW_SHOWING" | "COMING_SOON"): SeedMovie => {
+      const base = slugify(m.title);
+      let slug = base;
+      let n = 1;
+      while (usedSlugs.has(slug)) slug = `${base}-${++n}`;
+      usedSlugs.add(slug);
 
-        return {
-          tmdbId: m.tmdbId,
-          slug,
-          title: m.title,
-          synopsis: m.synopsis,
-          posterUrl: m.posterUrl || poster(slug),
-          backdropUrl: m.backdropUrl,
-          trailerUrl: m.trailerUrl,
-          genres: m.genres,
-          classification: m.classification,
-          language: m.language,
-          runtimeMins: m.runtimeMins,
-          cast: m.cast,
-          director: m.director,
-          releaseDate: new Date(m.releaseDate),
-          status,
-        };
+      return {
+        everyFilmId: m.everyFilmId,
+        slug,
+        title: m.title,
+        synopsis: m.synopsis,
+        posterUrl: m.posterUrl || poster(slug),
+        backdropUrl: m.backdropUrl,
+        trailerUrl: m.trailerUrl,
+        genres: m.genres,
+        classification: m.classification,
+        language: m.language,
+        runtimeMins: m.runtimeMins,
+        cast: m.cast,
+        director: m.director,
+        releaseDate: new Date(m.releaseDate),
+        status,
       };
+    };
 
-      const seedMovies = [
-        ...nowPlaying.map((m) => toSeedMovie(m, "NOW_SHOWING")),
-        ...upcoming.map((m) => toSeedMovie(m, "COMING_SOON")),
-      ];
+    const seedMovies = [
+      ...nowPlaying.map((m) => toSeedMovie(m, "NOW_SHOWING")),
+      ...upcoming.map((m) => toSeedMovie(m, "COMING_SOON")),
+    ];
 
-      if (seedMovies.length > 0) return seedMovies;
-      console.warn("TMDB returned no movies — falling back to the built-in fictional catalog.");
-    } catch (err) {
-      console.error("TMDB import failed, falling back to the built-in fictional catalog:", err);
-    }
-  } else {
-    console.log("No TMDB_API_KEY set — using the built-in fictional movie catalog.");
+    if (seedMovies.length > 0) return seedMovies;
+    console.warn("every.film returned no movies — falling back to the built-in fictional catalog.");
+  } catch (err) {
+    console.error("every.film import failed, falling back to the built-in fictional catalog:", err);
   }
 
   return MOVIES.map((m) => ({
-    tmdbId: null,
+    everyFilmId: null,
     slug: m.slug,
     title: m.title,
     synopsis: m.synopsis,
@@ -436,7 +432,7 @@ async function main() {
       where: { slug: m.slug },
       update: {},
       create: {
-        tmdbId: m.tmdbId,
+        everyFilmId: m.everyFilmId,
         title: m.title,
         slug: m.slug,
         synopsis: m.synopsis,

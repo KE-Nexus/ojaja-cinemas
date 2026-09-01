@@ -1,6 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
-import { fetchMovieDetail, fetchNowPlaying, fetchUpcoming, type ImportedMovie } from "@/lib/tmdb";
+import { fetchMovieDetail, fetchNowPlaying, fetchUpcoming, type ImportedMovie } from "@/lib/every-film";
 import type { MovieStatus } from "@prisma/client";
 
 function slugify(title: string) {
@@ -32,7 +32,7 @@ function autoStatus(releaseDate: string): "NOW_SHOWING" | "COMING_SOON" {
 
 function toMovieData(detail: ImportedMovie, slug: string, status: MovieStatus) {
   return {
-    tmdbId: detail.tmdbId,
+    everyFilmId: detail.everyFilmId,
     slug,
     title: detail.title,
     synopsis: detail.synopsis,
@@ -51,19 +51,19 @@ function toMovieData(detail: ImportedMovie, slug: string, status: MovieStatus) {
   };
 }
 
-/** Import (or refresh) a single TMDB title into the catalog. Idempotent on tmdbId. */
-export async function importMovieByTmdbId(tmdbId: number, status?: "NOW_SHOWING" | "COMING_SOON") {
-  const detail = await fetchMovieDetail(tmdbId);
+/** Import (or refresh) a single every.film title into the catalog. Idempotent on everyFilmId. */
+export async function importMovieByEveryFilmId(everyFilmId: string, status?: "NOW_SHOWING" | "COMING_SOON") {
+  const detail = await fetchMovieDetail(everyFilmId);
   const resolvedStatus = status ?? autoStatus(detail.releaseDate);
 
-  // Prefer a match on tmdbId, but fall back to an untagged row with the same title —
+  // Prefer a match on everyFilmId, but fall back to an untagged row with the same title —
   // e.g. movies added before this field existed, or hand-entered titles that happen to
-  // match a TMDB release. Without this, importing/syncing would create a duplicate
+  // match an every.film release. Without this, importing/syncing would create a duplicate
   // catalog entry instead of enriching (and preserving the showtimes/reviews of) the one
   // that's already there.
   const existing =
-    (await prisma.movie.findUnique({ where: { tmdbId } })) ??
-    (await prisma.movie.findFirst({ where: { tmdbId: null, title: detail.title } }));
+    (await prisma.movie.findUnique({ where: { everyFilmId } })) ??
+    (await prisma.movie.findFirst({ where: { everyFilmId: null, title: detail.title } }));
 
   if (existing) {
     const movie = await prisma.movie.update({
@@ -81,9 +81,9 @@ export async function importMovieByTmdbId(tmdbId: number, status?: "NOW_SHOWING"
 export type SyncSummary = { imported: number; updated: number; flipped: number };
 
 /**
- * Keeps the catalog current: pulls TMDB's now-playing/upcoming lists and upserts them
- * (by tmdbId), then flips any previously-imported Coming Soon title to Now Showing once
- * its release date has passed — even if TMDB has since rotated it out of "upcoming."
+ * Keeps the catalog current: pulls every.film's now-playing/upcoming lists and upserts them
+ * (by everyFilmId), then flips any previously-imported Coming Soon title to Now Showing once
+ * its release date has passed — even if every.film has since rotated it out of "upcoming."
  */
 export async function syncLatestMovies(): Promise<SyncSummary> {
   const [nowPlaying, upcomingRaw] = await Promise.all([fetchNowPlaying(15), fetchUpcoming(16)]);
@@ -95,12 +95,12 @@ export async function syncLatestMovies(): Promise<SyncSummary> {
   let updated = 0;
 
   for (const detail of nowPlaying) {
-    const { created } = await importMovieByTmdbId(detail.tmdbId, "NOW_SHOWING");
+    const { created } = await importMovieByEveryFilmId(detail.everyFilmId, "NOW_SHOWING");
     if (created) imported++;
     else updated++;
   }
   for (const detail of upcoming) {
-    const { created } = await importMovieByTmdbId(detail.tmdbId, "COMING_SOON");
+    const { created } = await importMovieByEveryFilmId(detail.everyFilmId, "COMING_SOON");
     if (created) imported++;
     else updated++;
   }

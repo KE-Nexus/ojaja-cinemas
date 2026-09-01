@@ -16,7 +16,7 @@ export function MovieDetailCard({ movie, showtimes }: { movie: MovieCardData; sh
   return (
     <div className="flex gap-4 rounded-xl border border-border bg-surface p-3 sm:p-4">
       <Link href={`/movies/${movie.slug}`} className="relative aspect-[2/3] w-28 shrink-0 overflow-hidden rounded-lg bg-surface-2 sm:w-32">
-        <Image src={movie.posterUrl} alt={movie.title} fill unoptimized sizes="150px" className="object-cover" />
+        <Image src={movie.posterUrl} alt={movie.title} fill unoptimized referrerPolicy="no-referrer" sizes="150px" className="object-cover" />
       </Link>
 
       <div className="min-w-0 flex-1">
