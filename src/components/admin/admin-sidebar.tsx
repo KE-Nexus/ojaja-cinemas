@@ -1,10 +1,13 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
+  Menu,
+  X,
   Film,
   CalendarClock,
   CalendarRange,
@@ -152,6 +155,7 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
 export function AdminSidebar({ name, role, grantedClaims }: { name: string; role: Role; grantedClaims: ClaimKey[] }) {
   const pathname = usePathname();
   const granted = new Set(grantedClaims);
+  const [open, setOpen] = useState(false);
 
   function isVisible(item: NavItem): boolean {
     const roleOk = !item.roles || item.roles.includes(role);
@@ -167,10 +171,32 @@ export function AdminSidebar({ name, role, grantedClaims }: { name: string; role
     .sort((a, b) => b.length - a.length)[0];
 
   return (
-    <aside className="glass sticky top-0 flex h-screen w-64 shrink-0 flex-col border-r border-white/5">
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        aria-label="Open menu"
+        className="glass fixed left-4 top-4 z-40 flex h-10 w-10 items-center justify-center rounded-lg border border-white/5 text-foreground md:hidden"
+      >
+        <Menu size={20} />
+      </button>
+
+      {open && <div className="fixed inset-0 z-40 bg-black/60 md:hidden" onClick={() => setOpen(false)} />}
+
+      <aside
+        className={cn(
+          "glass fixed inset-y-0 left-0 z-50 flex h-screen w-64 shrink-0 flex-col border-r border-white/5 transition-transform duration-200 md:sticky md:top-0 md:translate-x-0",
+          open ? "translate-x-0" : "-translate-x-full"
+        )}
+      >
       <div className="flex items-center justify-between border-b border-white/5 px-5 py-5">
-        <Image src="/logo-mark.png" alt="OJAJA Cinemas" width={441} height={229} className="h-8 w-auto" priority />
-        <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted">Office</span>
+        <div className="flex items-center gap-2">
+          <Image src="/logo-mark.png" alt="OJAJA Cinemas" width={441} height={229} className="h-8 w-auto" priority />
+          <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted">Office</span>
+        </div>
+        <button type="button" onClick={() => setOpen(false)} aria-label="Close menu" className="text-muted hover:text-foreground md:hidden">
+          <X size={18} />
+        </button>
       </div>
 
       <nav className="flex-1 overflow-y-auto px-3 py-4">
@@ -190,6 +216,7 @@ export function AdminSidebar({ name, role, grantedClaims }: { name: string; role
                     <Link
                       key={item.href}
                       href={item.href}
+                      onClick={() => setOpen(false)}
                       className={cn(
                         "relative flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
                         active ? "bg-brand/15 text-brand-light" : "text-muted hover:bg-white/5 hover:text-foreground"
@@ -230,6 +257,7 @@ export function AdminSidebar({ name, role, grantedClaims }: { name: string; role
           </LogoutButton>
         </div>
       </div>
-    </aside>
+      </aside>
+    </>
   );
 }

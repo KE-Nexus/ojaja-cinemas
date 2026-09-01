@@ -26,6 +26,8 @@ import {
   Wifi,
   WifiOff,
   Receipt,
+  X,
+  ShoppingCart,
 } from "lucide-react";
 import { posCheckoutAction } from "@/actions/pos/checkout";
 import { openCashDrawerAction, getShowtimesForDateAction } from "@/actions/pos/tools";
@@ -127,6 +129,7 @@ export function PosTerminal({
   const [itemLines, setItemLines] = useState<Record<string, ItemCartLine>>({});
   const [heldOrders, setHeldOrders] = useState<HeldOrder[]>([]);
   const [showHeldOrders, setShowHeldOrders] = useState(false);
+  const [showCart, setShowCart] = useState(false);
   const [activeModal, setActiveModal] = useState<"findItem" | "findBooking" | "userSales" | "orders" | "closeSession" | "swapTicket" | null>(null);
   const [now, setNow] = useState(() => new Date());
   const [isOnline, setIsOnline] = useState(() => typeof navigator === "undefined" || navigator.onLine);
@@ -403,6 +406,8 @@ export function PosTerminal({
   const itemTotal = Object.values(itemLines).reduce((s, l) => s + l.price * l.quantity, 0);
   const total = ticketTotal + itemTotal;
   const cartEmpty = Object.keys(ticketLines).length === 0 && Object.keys(itemLines).length === 0;
+  const cartItemCount =
+    Object.values(ticketLines).reduce((s, l) => s + l.quantity, 0) + Object.values(itemLines).reduce((s, l) => s + l.quantity, 0);
 
   function checkout(method: "CASH" | "CARD") {
     if (cartEmpty) {
@@ -598,15 +603,26 @@ export function PosTerminal({
           </AnimatePresence>
         </main>
 
-        {/* Cart sidebar */}
-        <aside className="flex w-80 shrink-0 flex-col border-l border-white/10 bg-white/[0.02]">
+        {/* Cart sidebar — an always-visible column on desktop, a slide-in drawer on mobile */}
+        {showCart && <div className="fixed inset-0 z-40 bg-black/60 md:hidden" onClick={() => setShowCart(false)} />}
+        <aside
+          className={cn(
+            "fixed inset-y-0 right-0 z-50 flex w-80 max-w-[85vw] shrink-0 flex-col border-l border-white/10 bg-black transition-transform duration-200 md:static md:z-auto md:max-w-none md:translate-x-0 md:bg-white/[0.02]",
+            showCart ? "translate-x-0" : "translate-x-full"
+          )}
+        >
           <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
             <p className="text-sm font-semibold">Current Order</p>
-            {!cartEmpty && (
-              <button onClick={clearCart} className="flex items-center gap-1 text-xs text-danger hover:underline">
-                <Trash2 size={12} /> Clear
+            <div className="flex items-center gap-3">
+              {!cartEmpty && (
+                <button onClick={clearCart} className="flex items-center gap-1 text-xs text-danger hover:underline">
+                  <Trash2 size={12} /> Clear
+                </button>
+              )}
+              <button onClick={() => setShowCart(false)} aria-label="Close cart" className="text-muted hover:text-white md:hidden">
+                <X size={18} />
               </button>
-            )}
+            </div>
           </div>
 
           <div className="flex-1 overflow-y-auto px-4 py-3">
@@ -702,8 +718,26 @@ export function PosTerminal({
         </aside>
       </div>
 
+      {/* Mobile-only floating trigger for the cart drawer */}
+      {!showCart && (
+        <button
+          onClick={() => setShowCart(true)}
+          className="fixed bottom-24 right-4 z-30 flex items-center gap-2 rounded-full bg-gradient-to-r from-brand to-accent-cyan px-4 py-3 text-sm font-semibold text-white shadow-lg md:hidden"
+        >
+          <span className="relative">
+            <ShoppingCart size={18} />
+            {cartItemCount > 0 && (
+              <span className="absolute -right-2 -top-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-black px-1 text-[10px] font-bold">
+                {cartItemCount}
+              </span>
+            )}
+          </span>
+          {formatNaira(total)}
+        </button>
+      )}
+
       {/* Bottom action bar */}
-      <div className="flex flex-wrap items-stretch divide-x divide-white/10 border-t border-white/10 bg-white/[0.03] text-xs font-medium text-muted">
+      <div className="flex flex-nowrap items-stretch divide-x divide-white/10 overflow-x-auto border-t border-white/10 bg-white/[0.03] text-xs font-medium text-muted">
         <ActionBarButton icon={<LogOut size={13} />} label="Log Off" onClick={handleLogOff} />
         <ActionBarButton icon={<XCircle size={13} />} label="Abort" onClick={abortOrder} danger />
         <ActionBarButton icon={<RefreshCw size={13} />} label="Refresh" onClick={handleRefresh} />
@@ -877,7 +911,7 @@ function ActionBarButton({
       disabled={disabled}
       onClick={onClick}
       className={cn(
-        "flex flex-1 flex-col items-center gap-1 whitespace-nowrap px-3 py-2.5 transition-colors hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent",
+        "flex shrink-0 flex-1 flex-col items-center gap-1 whitespace-nowrap px-3 py-2.5 transition-colors hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent sm:min-w-[92px]",
         danger && "text-danger hover:text-danger"
       )}
     >

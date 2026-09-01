@@ -50,7 +50,7 @@ export function OthersMenu({ onSelect }: { onSelect: (action: OthersAction) => v
         ref={buttonRef}
         onClick={toggle}
         className={cn(
-          "flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-sm font-medium transition-all",
+          "flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-3.5 py-1.5 text-sm font-medium transition-all",
           open ? "border-brand-light text-white" : "border-white/10 text-muted hover:border-white/30 hover:text-white"
         )}
       >

@@ -22,7 +22,7 @@ export default async function AdminDashboardLayout({ children }: { children: Rea
   return (
     <div className="flex min-h-screen bg-background">
       <AdminSidebar name={session.name} role={session.role} grantedClaims={grantedClaims} />
-      <main className="min-w-0 flex-1 p-6 sm:p-8">{children}</main>
+      <main className="min-w-0 flex-1 p-6 pt-20 md:p-8">{children}</main>
       <AppToaster />
     </div>
   );
