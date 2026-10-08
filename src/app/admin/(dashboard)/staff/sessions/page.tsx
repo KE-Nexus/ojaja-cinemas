@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { formatNaira } from "@/lib/format";
+import { formatNaira, formatDateTime } from "@/lib/format";
 import { expectedTotalsForSession } from "@/lib/staff-sessions";
 import { OpenSessionButton } from "@/components/admin/open-session-button";
 import { CloseSessionModal } from "@/components/admin/close-session-modal";
@@ -161,9 +161,9 @@ export default async function StaffSessionsPage({
                   <td className="p-3 font-semibold">
                     <VarianceCell value={varTotal} />
                   </td>
-                  <td className="p-3 text-muted">{s.openedAt.toLocaleString("en-NG")}</td>
+                  <td className="p-3 text-muted">{formatDateTime(s.openedAt)}</td>
                   <td className="p-3 text-muted">{s.closedBy?.name ?? "—"}</td>
-                  <td className="p-3 text-muted">{s.closedAt ? s.closedAt.toLocaleString("en-NG") : "—"}</td>
+                  <td className="p-3 text-muted">{s.closedAt ? formatDateTime(s.closedAt) : "—"}</td>
                   <td className="p-3">
                     {s.status === "OPEN" ? (
                       <CloseSessionModal id={s.id} staffName={s.staff.name} />

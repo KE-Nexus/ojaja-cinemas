@@ -43,7 +43,7 @@ export default async function PosPage() {
   const [showtimes, ticketClasses, items] = await Promise.all([
     prisma.showtime.findMany({
       where: { auditorium: { branchId: me.branchId }, startTime: { gte: todayStart, lt: todayEnd }, status: "OPEN", salesOnPos: true },
-      include: { movie: true, auditorium: true },
+      include: { movie: true, auditorium: true, priceCard: { include: { tickets: true } } },
       orderBy: { startTime: "asc" },
     }),
     prisma.ticketClass.findMany({
@@ -71,6 +71,9 @@ export default async function PosPage() {
         auditoriumName: st.auditorium.name,
         format: st.format,
         startTime: st.startTime.toISOString(),
+        // null = no price card assigned to this showing, every active ticket type is sellable;
+        // an array (even empty) means only these ticket classes apply.
+        priceCardTicketIds: st.priceCard ? st.priceCard.tickets.map((t) => t.ticketClassId) : null,
       }))}
       ticketClasses={ticketClasses.map((t) => ({
         id: t.id,

@@ -8,7 +8,7 @@ import { getReportDefinition } from "@/lib/admin-reports";
 import { DownloadCsvButton } from "@/components/admin/download-csv-button";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Select } from "@/components/ui/input";
-import { formatNaira } from "@/lib/format";
+import { formatNaira, formatDateTime, formatDate } from "@/lib/format";
 import { getBranchScope, resolveScopedBranchId } from "@/lib/branch-scope";
 
 function startOfDay(offset = 0) {
@@ -159,7 +159,7 @@ async function buildReport(key: string, filters: Filters): Promise<{ summary?: s
       return {
         table: {
           headers: ["Staff Member", "Role", "Actions", "Last Action"],
-          rows: rows.map((r) => [r.name, r.role, r.count, r.lastAction.toLocaleString("en-NG")]),
+          rows: rows.map((r) => [r.name, r.role, r.count, formatDateTime(r.lastAction)]),
         },
       };
     }
@@ -179,8 +179,8 @@ async function buildReport(key: string, filters: Filters): Promise<{ summary?: s
             return [
               s.staff.name,
               s.branch.name,
-              s.openedAt.toLocaleString("en-NG"),
-              s.closedAt?.toLocaleString("en-NG") ?? "—",
+              formatDateTime(s.openedAt),
+              s.closedAt ? formatDateTime(s.closedAt) : "—",
               formatNaira(s.actualCash ?? 0),
               formatNaira(s.actualCard ?? 0),
               formatNaira(s.actualTransfer ?? 0),
@@ -199,7 +199,7 @@ async function buildReport(key: string, filters: Filters): Promise<{ summary?: s
       });
       const byDayBranch = new Map<string, { day: string; branch: string; cash: number; card: number; transfer: number; voucher: number }>();
       for (const s of sessions) {
-        const day = (s.closedAt ?? s.openedAt).toLocaleDateString("en-NG");
+        const day = formatDate(s.closedAt ?? s.openedAt);
         const key = `${day}__${s.branch.id}`;
         const entry = byDayBranch.get(key) ?? { day, branch: s.branch.name, cash: 0, card: 0, transfer: 0, voucher: 0 };
         entry.cash += s.actualCash ?? 0;
@@ -291,7 +291,7 @@ async function buildReport(key: string, filters: Filters): Promise<{ summary?: s
           rows: contracts.map((c) => [
             c.movie.title,
             c.branch.name,
-            c.contractStartDate.toLocaleDateString("en-NG"),
+            formatDate(c.contractStartDate),
             c.movie.classification,
             c.movie.distributor ?? "—",
           ]),
@@ -380,7 +380,7 @@ async function buildReport(key: string, filters: Filters): Promise<{ summary?: s
             l.quantity,
             formatNaira(l.priceAtBooking),
             formatNaira(l.priceAtBooking * l.quantity),
-            l.booking.createdAt.toLocaleString("en-NG"),
+            formatDateTime(l.booking.createdAt),
           ]),
         },
       };
@@ -491,7 +491,7 @@ async function buildReport(key: string, filters: Filters): Promise<{ summary?: s
             b.showtime.movie.title,
             b.seats.length,
             formatNaira(b.totalAmount),
-            b.createdAt.toLocaleString("en-NG"),
+            formatDateTime(b.createdAt),
           ]),
         },
       };
@@ -604,7 +604,7 @@ async function buildReport(key: string, filters: Filters): Promise<{ summary?: s
               st.movie.title,
               st.auditorium.branch.name,
               st.auditorium.name,
-              st.startTime.toLocaleString("en-NG"),
+              formatDateTime(st.startTime),
               sold,
               capacity,
               capacity > 0 ? `${((sold / capacity) * 100).toFixed(1)}%` : "—",
@@ -654,7 +654,7 @@ async function buildReport(key: string, filters: Filters): Promise<{ summary?: s
             b.seats.length,
             formatNaira(b.totalAmount),
             b.processedBy?.name ?? "Customer",
-            b.updatedAt.toLocaleString("en-NG"),
+            formatDateTime(b.updatedAt),
           ]),
         },
       };
@@ -669,7 +669,7 @@ async function buildReport(key: string, filters: Filters): Promise<{ summary?: s
       return {
         table: {
           headers: ["Staff", "Branch", "Status", "Opened", "Closed"],
-          rows: sessions.map((s) => [s.staff.name, s.branch.name, s.status, s.openedAt.toLocaleString("en-NG"), s.closedAt?.toLocaleString("en-NG") ?? "—"]),
+          rows: sessions.map((s) => [s.staff.name, s.branch.name, s.status, formatDateTime(s.openedAt), s.closedAt ? formatDateTime(s.closedAt) : "—"]),
         },
       };
     }
@@ -680,7 +680,7 @@ async function buildReport(key: string, filters: Filters): Promise<{ summary?: s
       });
       const byDayMethod = new Map<string, { day: string; method: string; amount: number; count: number }>();
       for (const p of payments) {
-        const day = p.createdAt.toLocaleDateString("en-NG");
+        const day = formatDate(p.createdAt);
         const key = `${day}__${p.method}`;
         const entry = byDayMethod.get(key) ?? { day, method: p.method, amount: 0, count: 0 };
         entry.amount += p.amount;
@@ -711,7 +711,7 @@ async function buildReport(key: string, filters: Filters): Promise<{ summary?: s
             st.movie.title,
             st.auditorium.branch.name,
             st.auditorium.name,
-            st.startTime.toLocaleString("en-NG"),
+            formatDateTime(st.startTime),
             st.bookings.length,
             st.bookings.reduce((s, b) => s + b.seats.length, 0),
           ]),
@@ -733,7 +733,7 @@ async function buildReport(key: string, filters: Filters): Promise<{ summary?: s
             st.movie.title,
             st.auditorium.branch.name,
             st.auditorium.name,
-            st.startTime.toLocaleString("en-NG"),
+            formatDateTime(st.startTime),
             st.format,
             st.language,
             st.status,
@@ -775,7 +775,7 @@ async function buildReport(key: string, filters: Filters): Promise<{ summary?: s
         summary: `${logs.length} seat swap${logs.length === 1 ? "" : "s"}`,
         table: {
           headers: ["Booking Ref", "Swapped By", "Role", "Date"],
-          rows: logs.map((l) => [l.entityId, l.actor?.name ?? "System", l.actor?.role ?? "—", l.createdAt.toLocaleString("en-NG")]),
+          rows: logs.map((l) => [l.entityId, l.actor?.name ?? "System", l.actor?.role ?? "—", formatDateTime(l.createdAt)]),
         },
       };
     }

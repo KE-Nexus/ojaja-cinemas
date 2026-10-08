@@ -60,6 +60,25 @@ export function formatTime(date: Date | string): string {
   }).format(d);
 }
 
+/**
+ * Combined date+time, WAT-safe — for things like "Opened On"/"Closed On" columns. Deliberately
+ * NOT `date.toLocaleString("en-NG")`: that formats using the server process's own ambient
+ * timezone, which silently shows a wrong time (e.g. session close times an hour off) whenever
+ * the server isn't itself running in WAT.
+ */
+export function formatDateTime(date: Date | string): string {
+  const d = typeof date === "string" ? new Date(date) : date;
+  return new Intl.DateTimeFormat("en-NG", {
+    timeZone: WAT_TIME_ZONE,
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  }).format(d);
+}
+
 export function formatRuntime(mins: number): string {
   const h = Math.floor(mins / 60);
   const m = mins % 60;

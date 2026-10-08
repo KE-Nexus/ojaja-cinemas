@@ -79,7 +79,10 @@ export async function loginAction(_prev: FormState, formData: FormData): Promise
 
 export async function logoutAction(): Promise<{ redirectTo: string }> {
   await destroySession();
-  revalidatePath("/", "layout");
+  // Scoped to "/" itself, not the whole layout subtree — logout always lands there, and
+  // busting every route's cache (what "layout" does) made the destination page take a full
+  // cache-less re-render to become ready, which is what made signing out feel like it hung.
+  revalidatePath("/");
   return { redirectTo: "/" };
 }
 

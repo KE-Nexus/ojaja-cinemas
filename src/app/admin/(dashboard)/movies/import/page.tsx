@@ -17,16 +17,46 @@ export default async function ImportMoviesPage({
   const query = q?.trim() ?? "";
   const pageNum = Math.max(1, Number(page) || 1);
 
-  const { results, totalPages } = query ? await searchMovies(query, pageNum) : await fetchPopular(pageNum);
+  let results: Awaited<ReturnType<typeof searchMovies>>["results"] = [];
+  let totalPages = 1;
+  let providerError: string | null = null;
+  try {
+    const data = query ? await searchMovies(query, pageNum) : await fetchPopular(pageNum);
+    results = data.results;
+    totalPages = data.totalPages;
+  } catch (err) {
+    providerError = err instanceof Error ? err.message : "every.film is currently unreachable.";
+  }
 
-  const existingMovies = await prisma.movie.findMany({
-    where: { everyFilmId: { in: results.map((r) => r.everyFilmId) } },
-    select: { id: true, everyFilmId: true },
-  });
+  const existingMovies = providerError
+    ? []
+    : await prisma.movie.findMany({
+        where: { everyFilmId: { in: results.map((r) => r.everyFilmId) } },
+        select: { id: true, everyFilmId: true },
+      });
   const existingByEveryFilmId = new Map(existingMovies.map((m) => [m.everyFilmId, m.id]));
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
+
+  if (providerError) {
+    return (
+      <div>
+        <h1 className="mb-2 text-2xl font-bold tracking-tight">Import Movies</h1>
+        <div className="mt-6 rounded-2xl border border-danger/30 bg-danger/10 p-6">
+          <p className="font-semibold text-danger">every.film is currently unavailable</p>
+          <p className="mt-1 text-sm text-muted">
+            The movie data provider isn&rsquo;t responding right now ({providerError}). This is an outage on their end, not
+            something wrong with your catalog — try again later, or{" "}
+            <Link href="/admin/movies/new" className="text-brand-light hover:underline">
+              add this movie manually
+            </Link>{" "}
+            in the meantime.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>

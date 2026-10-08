@@ -1,5 +1,8 @@
-const API_BASE = "https://api.every.film/api/v1";
-const IMAGE_ORIGIN = "https://api.every.film";
+// The API moved off the api.every.film subdomain at some point — api.every.film now
+// returns 410 Gone on every path, confirmed against the live service. The apex domain is
+// current as of this check; verify again if this ever starts failing.
+const API_BASE = "https://every.film/api/v1";
+const IMAGE_ORIGIN = "https://every.film";
 
 /** every.film's public read API needs no key (rate-limited, CC-BY-SA 4.0, free for commercial
  * use) — unlike TMDB, whose API terms restrict commercial use without a paid license. */

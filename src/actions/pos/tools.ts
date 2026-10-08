@@ -20,6 +20,7 @@ export type PosShowtimeOption = {
   auditoriumName: string;
   format: string;
   startTime: string;
+  priceCardTicketIds: string[] | null;
 };
 
 /** Powers the Tickets tab's date picker — lets a cashier sell tickets for any future session, not just today's. */
@@ -34,7 +35,7 @@ export async function getShowtimesForDateAction(dateStr: string): Promise<{ erro
 
   const showtimes = await prisma.showtime.findMany({
     where: { auditorium: { branchId: staffSession.branchId }, startTime: { gte: dayStart, lt: dayEnd }, status: "OPEN", salesOnPos: true },
-    include: { movie: true, auditorium: true },
+    include: { movie: true, auditorium: true, priceCard: { include: { tickets: true } } },
     orderBy: { startTime: "asc" },
   });
 
@@ -46,6 +47,7 @@ export async function getShowtimesForDateAction(dateStr: string): Promise<{ erro
       auditoriumName: st.auditorium.name,
       format: st.format,
       startTime: st.startTime.toISOString(),
+      priceCardTicketIds: st.priceCard ? st.priceCard.tickets.map((t) => t.ticketClassId) : null,
     })),
   };
 }

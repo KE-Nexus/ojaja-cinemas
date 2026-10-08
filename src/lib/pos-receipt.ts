@@ -2,7 +2,7 @@
 
 import { jsPDF } from "jspdf";
 
-export type ReceiptLine = { label: string; quantity: number; price: number };
+export type ReceiptLine = { label: string; quantity: number; price: number; subContent?: string };
 
 export type ReceiptData = {
   reference: string;
@@ -44,8 +44,9 @@ async function loadLogoDataUrl(): Promise<string | null> {
 export async function printPosReceipt(data: ReceiptData) {
   const logo = await loadLogoDataUrl();
 
-  const lineCount = data.ticketLines.length + data.itemLines.length;
-  const height = 95 + lineCount * 9;
+  const allLines = [...data.ticketLines, ...data.itemLines];
+  const subContentLines = allLines.filter((l) => l.subContent).length;
+  const height = 95 + allLines.length * 9 + subContentLines * 4;
   const doc = new jsPDF({ unit: "mm", format: [PAGE_WIDTH, height] });
 
   const marginX = 5;
@@ -90,7 +91,7 @@ export async function printPosReceipt(data: ReceiptData) {
   doc.line(marginX, y, rightX, y);
   y += 5;
 
-  for (const l of [...data.ticketLines, ...data.itemLines]) {
+  for (const l of allLines) {
     doc.setFont("helvetica", "bold");
     doc.setFontSize(8.5);
     doc.text(l.label, marginX, y, { maxWidth: (rightX - marginX) * 0.6 });
@@ -100,6 +101,13 @@ export async function printPosReceipt(data: ReceiptData) {
     doc.setFontSize(7.5);
     doc.text(`${l.quantity} x ${formatAmount(l.price)}`, marginX, y);
     y += 5;
+    if (l.subContent) {
+      doc.setFontSize(7);
+      doc.setTextColor(120);
+      doc.text(l.subContent, marginX, y, { maxWidth: rightX - marginX });
+      doc.setTextColor(0);
+      y += 4;
+    }
   }
 
   doc.line(marginX, y, rightX, y);

@@ -18,10 +18,10 @@ const nextConfig: NextConfig = {
       },
       {
         protocol: "https",
-        hostname: "api.every.film",
+        hostname: "every.film",
       },
       {
-        // Fallback only — every.film's own self-hosted image mirror (api.every.film) is the
+        // Fallback only — every.film's own self-hosted image mirror (every.film) is the
         // primary source; this covers the rare case where a stored copy isn't available yet.
         protocol: "https",
         hostname: "image.tmdb.org",

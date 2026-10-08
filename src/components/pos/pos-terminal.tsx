@@ -54,6 +54,7 @@ type ShowtimeOption = {
   auditoriumName: string;
   format: string;
   startTime: string;
+  priceCardTicketIds: string[] | null;
 };
 
 type TicketClassOption = {
@@ -249,6 +250,11 @@ export function PosTerminal({
   }
 
   const selectedShowtime = showtimes.find((s) => s.id === selectedShowtimeId) ?? null;
+  // A showtime assigned a price card in admin can only sell the ticket types on that card —
+  // no price card means every active ticket type for the branch is still sellable.
+  const sellableTicketClasses = selectedShowtime?.priceCardTicketIds
+    ? ticketClasses.filter((tc) => selectedShowtime.priceCardTicketIds!.includes(tc.id))
+    : ticketClasses;
 
   function pickShowtime(id: string) {
     if (id !== selectedShowtimeId && Object.keys(ticketLines).length > 0) {
@@ -447,7 +453,16 @@ export function PosTerminal({
         branchName,
         staffName,
         paymentMethod: method,
-        ticketLines: Object.values(ticketLines).map((l) => ({ label: l.label, quantity: l.quantity, price: l.price })),
+        ticketLines: Object.values(ticketLines).map((l) => {
+          const tc = ticketClasses.find((t) => t.id === l.ticketClassId);
+          const subContent = tc?.packageContents
+            ? [
+                ...tc.packageContents.tickets.map((t) => `${t.quantity * l.quantity}x ${t.label}`),
+                ...tc.packageContents.items.map((it) => `${it.quantity * l.quantity}x ${it.name}`),
+              ].join(", ")
+            : undefined;
+          return { label: l.label, quantity: l.quantity, price: l.price, subContent };
+        }),
         itemLines: Object.values(itemLines).map((l) => ({ label: l.name, quantity: l.quantity, price: l.price })),
         total: result.total ?? total,
       });
@@ -549,11 +564,11 @@ export function PosTerminal({
                     <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted">
                       <Film size={12} /> Ticket Types for {selectedShowtime.movieTitle}
                     </p>
-                    {ticketClasses.length === 0 ? (
+                    {sellableTicketClasses.length === 0 ? (
                       <p className="rounded-xl border border-dashed border-white/10 p-6 text-center text-sm text-muted">No ticket types configured.</p>
                     ) : (
                       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-                        {ticketClasses.map((tc) => (
+                        {sellableTicketClasses.map((tc) => (
                           <GridTile key={tc.id} label={tc.label} price={tc.price} onClick={() => addTicket(tc)} />
                         ))}
                       </div>

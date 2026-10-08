@@ -18,6 +18,10 @@ export async function GET(request: Request) {
     }
   }
 
-  const summary = await syncLatestMovies();
-  return NextResponse.json({ ok: true, ...summary });
+  try {
+    const summary = await syncLatestMovies();
+    return NextResponse.json({ ok: true, ...summary });
+  } catch (err) {
+    return NextResponse.json({ ok: false, error: err instanceof Error ? err.message : "every.film is unreachable." }, { status: 502 });
+  }
 }

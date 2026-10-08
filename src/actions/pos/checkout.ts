@@ -122,12 +122,24 @@ export async function posCheckoutAction(cart: CartInput, paymentMethod: "CASH" |
 
   if (!cart.showtimeId) return { error: "No showtime selected for the tickets in this order." };
 
-  const showtime = await prisma.showtime.findUnique({ where: { id: cart.showtimeId }, include: { auditorium: true, movie: true } });
+  const showtime = await prisma.showtime.findUnique({
+    where: { id: cart.showtimeId },
+    include: { auditorium: true, movie: true, priceCard: { include: { tickets: true } } },
+  });
   if (!showtime) return { error: "This showtime no longer exists." };
   if (showtime.auditorium.branchId !== staffSession.branchId) {
     return { error: "This showtime doesn't belong to your cinema." };
   }
   if (!showtime.salesOnPos) return { error: "This showtime isn't available for sale on POS." };
+
+  // Checked against what the cashier actually picked, not the package-expanded lines — a
+  // combo's own id is what the price card whitelists, not the tickets/items bundled inside it.
+  if (showtime.priceCard) {
+    const allowed = new Set(showtime.priceCard.tickets.map((t) => t.ticketClassId));
+    if (rawTicketLines.some((l) => !allowed.has(l.ticketClassId))) {
+      return { error: "One or more ticket types aren't on this showtime's price card." };
+    }
+  }
 
   const ticketClasses = await prisma.ticketClass.findMany({ where: { id: { in: ticketLines.map((l) => l.ticketClassId) } } });
   if (ticketClasses.length !== ticketLines.length) return { error: "One or more ticket types couldn't be found." };
