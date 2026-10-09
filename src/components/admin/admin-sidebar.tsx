@@ -40,6 +40,8 @@ import {
   Settings,
   CreditCard,
   Boxes,
+  Building2,
+  Languages,
 } from "lucide-react";
 import { LogoutButton } from "@/components/logout-button";
 import type { Role } from "@prisma/client";
@@ -143,6 +145,8 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
     label: "Administration",
     items: [
       { href: "/admin/users", label: "Users & Roles", icon: Users, roles: ["CIRCUIT_ADMIN"] },
+      { href: "/admin/distributors", label: "Distributors", icon: Building2, roles: ["CIRCUIT_ADMIN"] },
+      { href: "/admin/languages", label: "Languages", icon: Languages, roles: ["CIRCUIT_ADMIN"] },
       { href: "/admin/audit-log", label: "Audit Log", icon: ScrollText, roles: ["SUPERVISOR", "CIRCUIT_ADMIN", "AUDITOR"] },
     ],
   },

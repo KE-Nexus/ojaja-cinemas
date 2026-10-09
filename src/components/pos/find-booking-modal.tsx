@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Search } from "lucide-react";
+import { Search, CreditCard } from "lucide-react";
+import { toast } from "sonner";
 import { PosModalShell } from "@/components/pos/pos-modal-shell";
-import { findBookingAction, type FoundBooking } from "@/actions/pos/tools";
-import { formatNaira } from "@/lib/format";
+import { findBookingAction, processBookingCardPaymentAction, type FoundBooking } from "@/actions/pos/tools";
+import { formatNaira, formatDateTime } from "@/lib/format";
 import { cn } from "@/lib/cn";
 
 type Mode = "reference" | "phone" | "email";
@@ -15,6 +16,7 @@ export function FindBookingModal({ onClose }: { onClose: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const [booking, setBooking] = useState<FoundBooking | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [isPaying, startPayment] = useTransition();
 
   function search() {
     if (!query.trim()) return;
@@ -28,6 +30,19 @@ export function FindBookingModal({ onClose }: { onClose: () => void }) {
       } catch {
         setError("You're offline — this needs a connection.");
       }
+    });
+  }
+
+  function pay() {
+    if (!booking) return;
+    startPayment(async () => {
+      const result = await processBookingCardPaymentAction(booking.id);
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success(`Payment processed — ${booking.reference} marked as paid by card.`);
+      setBooking({ ...booking, status: "CONFIRMED" });
     });
   }
 
@@ -83,13 +98,35 @@ export function FindBookingModal({ onClose }: { onClose: () => void }) {
           </div>
           <p className="text-sm text-muted">{booking.movie}</p>
           <p className="text-sm text-muted">
-            {booking.branch} · {new Date(booking.startTime).toLocaleString("en-NG", { dateStyle: "medium", timeStyle: "short" })}
+            {booking.branch} · {formatDateTime(booking.startTime)}
           </p>
           {booking.guestName && <p className="mt-1 text-sm text-muted">Guest: {booking.guestName}</p>}
           <p className="mt-2 text-sm">
             Seats: {booking.seats.map((s) => `${s.row}${s.number}`).join(", ") || "None"}
           </p>
+          {booking.concessions.length > 0 && (
+            <div className="mt-2 text-sm">
+              <p className="text-muted">Concessions:</p>
+              <ul className="ml-3 list-disc">
+                {booking.concessions.map((c, i) => (
+                  <li key={i}>
+                    {c.quantity}x {c.name} — {formatNaira(c.price * c.quantity)}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           <p className="mt-2 text-lg font-bold text-brand-light">{formatNaira(booking.total)}</p>
+
+          {booking.status === "PENDING" && (
+            <button
+              onClick={pay}
+              disabled={isPaying}
+              className="mt-4 flex w-full items-center justify-center gap-1.5 rounded-lg bg-gradient-to-r from-brand to-accent-cyan py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+            >
+              <CreditCard size={15} /> {isPaying ? "Processing..." : "Process Card Payment"}
+            </button>
+          )}
         </div>
       )}
     </PosModalShell>

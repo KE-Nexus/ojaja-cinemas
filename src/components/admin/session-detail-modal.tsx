@@ -13,7 +13,7 @@ import type { ScheduleSession } from "@/components/admin/scheduling-day-view";
 export function SessionDetailModal({ session, onClose }: { session: ScheduleSession; onClose: () => void }) {
   const [isPending, startTransition] = useTransition();
   const [editing, setEditing] = useState(false);
-  const { movies, rooms, priceCards } = useSchedulingActions();
+  const { movies, rooms, priceCards, languages } = useSchedulingActions();
   const start = new Date(session.startTime);
   const end = new Date(start.getTime() + session.runtimeMins * 60000);
   const [canEdit] = useState(() => start.getTime() > Date.now());
@@ -25,6 +25,7 @@ export function SessionDetailModal({ session, onClose }: { session: ScheduleSess
         movies={movies}
         rooms={rooms}
         priceCards={priceCards}
+        languages={languages}
         onClose={() => setEditing(false)}
         onSaved={onClose}
       />

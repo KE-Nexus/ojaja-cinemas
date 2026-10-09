@@ -8,7 +8,15 @@ import { MovieImageUploader } from "@/components/admin/movie-image-uploader";
 import { MovieTrailerField } from "@/components/admin/movie-trailer-field";
 import type { Movie } from "@prisma/client";
 
-export function MovieForm({ movie }: { movie?: Movie }) {
+export function MovieForm({
+  movie,
+  distributors,
+  languages,
+}: {
+  movie?: Movie;
+  distributors: { id: string; name: string }[];
+  languages: { id: string; name: string }[];
+}) {
   const action = movie ? updateMovieAction : createMovieAction;
   const [state, formAction, isPending] = useActionState<FormState, FormData>(action, null);
 
@@ -46,7 +54,16 @@ export function MovieForm({ movie }: { movie?: Movie }) {
         </div>
         <div>
           <Label htmlFor="language">Language</Label>
-          <Input id="language" name="language" defaultValue={movie?.language} required />
+          <Select id="language" name="language" defaultValue={movie?.language ?? ""} required>
+            <option value="" disabled>
+              Select a language
+            </option>
+            {languages.map((l) => (
+              <option key={l.id} value={l.name}>
+                {l.name}
+              </option>
+            ))}
+          </Select>
         </div>
       </div>
 
@@ -81,8 +98,15 @@ export function MovieForm({ movie }: { movie?: Movie }) {
       </div>
 
       <div>
-        <Label htmlFor="distributor">Distributor</Label>
-        <Input id="distributor" name="distributor" defaultValue={movie?.distributor ?? ""} placeholder="e.g. Universal Pictures" />
+        <Label htmlFor="distributorId">Distributor</Label>
+        <Select id="distributorId" name="distributorId" defaultValue={movie?.distributorId ?? ""}>
+          <option value="">No distributor</option>
+          {distributors.map((d) => (
+            <option key={d.id} value={d.id}>
+              {d.name}
+            </option>
+          ))}
+        </Select>
       </div>
 
       {state?.error && <FieldError>{state.error}</FieldError>}

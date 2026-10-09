@@ -65,6 +65,7 @@ export async function verifyAdminPinAction(staffNumber: string, pin: string): Pr
 }
 
 export type FoundBooking = {
+  id: string;
   reference: string;
   movie: string;
   branch: string;
@@ -73,6 +74,7 @@ export type FoundBooking = {
   guestName: string | null;
   total: number;
   seats: { row: string; number: number; category: string }[];
+  concessions: { name: string; quantity: number; price: number }[];
 };
 
 export async function findBookingAction(query: {
@@ -90,17 +92,22 @@ export async function findBookingAction(query: {
   if (!reference && !phone && !email) return { error: "Enter a booking code, phone number, or email." };
 
   const booking = await prisma.booking.findFirst({
-    where: reference ? { reference: reference.toUpperCase() } : phone ? { guestPhone: phone } : { guestEmail: email },
+    where: {
+      ...(reference ? { reference: reference.toUpperCase() } : phone ? { guestPhone: phone } : { guestEmail: email }),
+      showtime: { auditorium: { branchId: staffSession.branchId } },
+    },
     include: {
       showtime: { include: { movie: true, auditorium: { include: { branch: true } } } },
       seats: { include: { seat: true } },
+      concessions: { include: { posItem: true } },
     },
     orderBy: { createdAt: "desc" },
   });
-  if (!booking) return { error: "No booking found." };
+  if (!booking) return { error: "No booking found at this cinema." };
 
   return {
     booking: {
+      id: booking.id,
       reference: booking.reference,
       movie: booking.showtime.movie.title,
       branch: booking.showtime.auditorium.branch.name,
@@ -109,8 +116,37 @@ export async function findBookingAction(query: {
       guestName: booking.guestName,
       total: booking.totalAmount,
       seats: booking.seats.map((s) => ({ row: s.seat.row, number: s.seat.number, category: s.seat.category })),
+      concessions: booking.concessions.map((c) => ({ name: c.posItem.name, quantity: c.quantity, price: c.priceAtBooking })),
     },
   };
+}
+
+/** Completes an unpaid (PENDING) booking found via Find Booking by charging it as a POS card
+ * payment — same Payment shape `posCheckoutAction`'s card branch creates, just against an
+ * existing booking instead of a freshly-built cart. */
+export async function processBookingCardPaymentAction(bookingId: string): Promise<{ error?: string; success?: boolean }> {
+  const session = await requireRole(["TICKETER", "SUPERVISOR", "CIRCUIT_ADMIN"]);
+  const staffSession = await prisma.staffSession.findFirst({ where: { staffId: session.sub, status: "OPEN" } });
+  if (!staffSession) return { error: "Open a session first." };
+
+  const booking = await prisma.booking.findUnique({
+    where: { id: bookingId },
+    include: { showtime: { include: { auditorium: true } }, seats: true },
+  });
+  if (!booking) return { error: "This booking no longer exists." };
+  if (booking.showtime.auditorium.branchId !== staffSession.branchId) return { error: "This booking doesn't belong to your cinema." };
+  if (booking.status !== "PENDING") return { error: "This booking has already been processed." };
+
+  await prisma.$transaction(async (tx) => {
+    await tx.booking.update({ where: { id: booking.id }, data: { status: "CONFIRMED", processedById: session.sub } });
+    await tx.payment.create({
+      data: { bookingId: booking.id, provider: "pos", method: "CARD", status: "SUCCESS", amount: booking.totalAmount, reference: `POS-${booking.reference}` },
+    });
+    await tx.seatLock.deleteMany({ where: { showtimeId: booking.showtimeId, seatId: { in: booking.seats.map((s) => s.seatId) } } });
+  });
+
+  await logAdminAction(session.sub, "UPDATE", "Booking", booking.reference, { channel: "pos", amount: booking.totalAmount, paymentMethod: "CARD" });
+  return { success: true };
 }
 
 export type UserSalesSummary = { orders: number; ticketRevenue: number; concessionRevenue: number; total: number };

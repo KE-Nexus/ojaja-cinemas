@@ -15,7 +15,9 @@ export default async function NewTicketClassPage() {
       include: { branch: true },
       orderBy: { description: "asc" },
     }),
-    prisma.posItem.findMany({ where: { branchId: { in: branchIds } }, orderBy: { name: "asc" } }),
+    // A null branchId is a Head Office item shared across every cinema, not "belongs to no
+    // branch" — `{ in: branchIds }` alone would silently exclude every HO item from the list.
+    prisma.posItem.findMany({ where: { OR: [{ branchId: { in: branchIds } }, { branchId: null }] }, orderBy: { name: "asc" } }),
   ]);
 
   return (
@@ -29,7 +31,7 @@ export default async function NewTicketClassPage() {
             label: `${t.description} (${t.branch.name})`,
             defaultPrice: t.defaultPrice,
           }))}
-          itemOptions={items.map((it) => ({ id: it.id, label: it.name, defaultPrice: it.defaultPrice }))}
+          itemOptions={items.map((it) => ({ id: it.id, label: it.name, defaultPrice: it.defaultPrice, branchId: it.branchId }))}
         />
       </div>
     </div>

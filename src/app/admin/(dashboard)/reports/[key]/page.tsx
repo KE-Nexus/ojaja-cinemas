@@ -228,11 +228,11 @@ async function buildReport(key: string, filters: Filters): Promise<{ summary?: s
     case "distributor-by-film": {
       const bookings = await prisma.booking.findMany({
         where: { status: "CONFIRMED", ...(createdAt ? { createdAt } : {}), ...bookingBranchWhere(branchId) },
-        include: { showtime: { include: { movie: true } }, seats: true },
+        include: { showtime: { include: { movie: { include: { distributor: true } } } }, seats: true },
       });
       const byDistributor = new Map<string, { revenue: number; tickets: number; bookings: number }>();
       for (const b of bookings) {
-        const key = b.showtime.movie.distributor?.trim() || "Independent / Unlisted";
+        const key = b.showtime.movie.distributor?.name.trim() || "Independent / Unlisted";
         const entry = byDistributor.get(key) ?? { revenue: 0, tickets: 0, bookings: 0 };
         entry.revenue += b.totalAmount;
         entry.tickets += b.seats.length;
@@ -281,7 +281,7 @@ async function buildReport(key: string, filters: Filters): Promise<{ summary?: s
     case "film-hire-report": {
       const contracts = await prisma.filmContract.findMany({
         where: { ...(createdAt ? { createdAt } : {}), ...(branchId ? { branchId } : {}) },
-        include: { movie: true, branch: true },
+        include: { movie: { include: { distributor: true } }, branch: true },
         orderBy: { contractStartDate: "desc" },
       });
       return {
@@ -293,7 +293,7 @@ async function buildReport(key: string, filters: Filters): Promise<{ summary?: s
             c.branch.name,
             formatDate(c.contractStartDate),
             c.movie.classification,
-            c.movie.distributor ?? "—",
+            c.movie.distributor?.name ?? "—",
           ]),
         },
       };

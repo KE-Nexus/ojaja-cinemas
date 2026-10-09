@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input, Label, FieldError } from "@/components/ui/input";
 import { AuthStatusOverlay, type AuthStatus } from "@/components/auth-status-overlay";
 
-export function LoginForm() {
+export function LoginForm({ variant = "customer" }: { variant?: "customer" | "staff" }) {
   const [state, formAction, isPending] = useActionState<FormState, FormData>(loginAction, null);
   const [phase, setPhase] = useState<"idle" | "success" | "error">("idle");
   const [prevState, setPrevState] = useState(state);
@@ -33,6 +33,16 @@ export function LoginForm() {
 
   const overlayStatus: AuthStatus | null = isPending ? "pending" : phase === "success" ? "success" : phase === "error" ? "error" : null;
 
+  // Customer web login is disabled — guests still book without an account, and this keeps
+  // /login from being a dead page rather than silently rendering a non-functional form.
+  if (variant === "customer") {
+    return (
+      <p className="rounded-xl border border-border bg-surface-2/60 p-4 text-sm text-muted">
+        Online account login is currently unavailable. You can still book tickets as a guest, or visit any OJAJA cinema for assistance.
+      </p>
+    );
+  }
+
   return (
     <>
       <form action={formAction} className="space-y-4">
@@ -56,13 +66,6 @@ export function LoginForm() {
         <Button type="submit" className="w-full" disabled={isPending}>
           {isPending ? "Signing in..." : "Log In"}
         </Button>
-
-        <p className="text-center text-sm text-muted">
-          Don&rsquo;t have an account?{" "}
-          <Link href="/register" className="text-brand-light hover:underline">
-            Sign up
-          </Link>
-        </p>
       </form>
 
       <AuthStatusOverlay

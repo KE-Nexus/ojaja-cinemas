@@ -10,13 +10,13 @@ import { toDatetimeLocal } from "@/components/admin/create-film-sessions-modal";
 import type { ScheduleSession } from "@/components/admin/scheduling-day-view";
 
 const SCREEN_FORMATS = ["Standard 2D", "Standard 3D", "IMAX 2D", "IMAX 3D", "4DX"];
-const LANGUAGES = ["English", "Yoruba", "Igbo", "Hausa", "Pidgin", "French"];
 
 export function EditSessionModal({
   session,
   movies,
   rooms,
   priceCards,
+  languages,
   onClose,
   onSaved,
 }: {
@@ -24,6 +24,7 @@ export function EditSessionModal({
   movies: { id: string; title: string }[];
   rooms: { id: string; name: string }[];
   priceCards: { id: string; name: string }[];
+  languages: { id: string; name: string }[];
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -81,9 +82,9 @@ export function EditSessionModal({
             <div>
               <Label htmlFor="language">Select Language</Label>
               <Select id="language" name="language" defaultValue={session.language}>
-                {LANGUAGES.map((l) => (
-                  <option key={l} value={l}>
-                    {l}
+                {languages.map((l) => (
+                  <option key={l.id} value={l.name}>
+                    {l.name}
                   </option>
                 ))}
               </Select>

@@ -7,12 +7,14 @@ type Movie = { id: string; title: string; runtimeMins: number };
 type Room = { id: string; name: string };
 type PriceCardOption = { id: string; name: string };
 type Branch = { id: string; name: string };
+type LanguageOption = { id: string; name: string };
 
 type SchedulingCtx = {
   openCreateModal: (prefill?: SessionPrefill) => void;
   movies: Movie[];
   rooms: Room[];
   priceCards: PriceCardOption[];
+  languages: LanguageOption[];
 };
 const SchedulingContext = createContext<SchedulingCtx | null>(null);
 
@@ -28,6 +30,7 @@ export function SchedulingProvider({
   rooms,
   priceCards,
   branches,
+  languages,
   defaultBranchId,
   defaultDate,
 }: {
@@ -36,6 +39,7 @@ export function SchedulingProvider({
   rooms: Room[];
   priceCards: PriceCardOption[];
   branches: Branch[];
+  languages: LanguageOption[];
   defaultBranchId?: string;
   defaultDate: string;
 }) {
@@ -52,6 +56,7 @@ export function SchedulingProvider({
         movies,
         rooms,
         priceCards,
+        languages,
       }}
     >
       {children}
@@ -62,6 +67,7 @@ export function SchedulingProvider({
         rooms={rooms}
         priceCards={priceCards}
         branches={branches}
+        languages={languages}
         defaultBranchId={defaultBranchId}
         defaultDate={defaultDate}
         prefill={prefill}

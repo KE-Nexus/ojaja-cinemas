@@ -91,17 +91,14 @@ export function SeatSelectionClient({
         {selected.size === 0 ? (
           <p className="text-sm text-muted">Tap available seats to select them.</p>
         ) : (
-          <ul className="space-y-1.5 text-sm">
+          <ul className="flex flex-wrap gap-1.5 text-sm">
             {Array.from(selected).map((id) => {
               const seat = seatById.get(id);
               if (!seat) return null;
               return (
-                <li key={id} className="flex items-center justify-between">
-                  <span>
-                    {seat.row}
-                    {seat.number} <span className="text-muted">({seat.category.toLowerCase()})</span>
-                  </span>
-                  <span>{formatNaira(seatPrice(basePrice, seat.category))}</span>
+                <li key={id} className="rounded-md bg-surface-2 px-2 py-1">
+                  {seat.row}
+                  {seat.number}
                 </li>
               );
             })}

@@ -7,6 +7,7 @@ import { hasClaim } from "@/lib/claims";
 import type { Role } from "@prisma/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { LocationFilterField } from "@/components/admin/location-filter-field";
 import { StaffActionsModal } from "@/components/admin/staff-actions-modal";
 import { getBranchScope, resolveScopedBranchId } from "@/lib/branch-scope";
@@ -23,19 +24,32 @@ const ROLE_LABELS: Record<string, string> = {
 export default async function StaffPage({
   searchParams,
 }: {
-  searchParams: Promise<{ location?: string }>;
+  searchParams: Promise<{ location?: string; q?: string }>;
 }) {
   const session = await getSession();
   if (session?.role !== "SUPERVISOR" && session?.role !== "CIRCUIT_ADMIN") redirect("/admin");
 
-  const { location } = await searchParams;
+  const { location, q } = await searchParams;
+  const query = q?.trim();
 
   const scope = await getBranchScope();
   const effectiveLocation = resolveScopedBranchId(scope, location);
 
   const [staff, branches] = await Promise.all([
     prisma.user.findMany({
-      where: { role: { not: "CUSTOMER" }, ...(effectiveLocation ? { branchId: effectiveLocation } : {}) },
+      where: {
+        role: { not: "CUSTOMER" },
+        ...(effectiveLocation ? { branchId: effectiveLocation } : {}),
+        ...(query
+          ? {
+              OR: [
+                { name: { contains: query, mode: "insensitive" } },
+                { email: { contains: query, mode: "insensitive" } },
+                { staffNumber: { contains: query, mode: "insensitive" } },
+              ],
+            }
+          : {}),
+      },
       include: { branch: true },
       orderBy: { createdAt: "asc" },
     }),
@@ -69,11 +83,12 @@ export default async function StaffPage({
       </div>
 
       <form method="get" className="mb-6 flex flex-wrap items-center gap-2">
+        <Input name="q" defaultValue={query ?? ""} placeholder="Search by name, email, or user number" className="max-w-xs" />
         <LocationFilterField branches={branches} selected={effectiveLocation} locked={!scope.isCircuitAdmin} />
         <Button type="submit" variant="secondary">
           Filter
         </Button>
-        {effectiveLocation && scope.isCircuitAdmin && (
+        {(effectiveLocation || query) && (
           <Link href="/admin/staff" className="flex items-center gap-1 text-sm text-muted hover:text-brand-light">
             <X size={14} /> Clear
           </Link>
@@ -82,7 +97,7 @@ export default async function StaffPage({
 
       {staff.length === 0 ? (
         <p className="rounded-2xl border border-border bg-surface p-8 text-center text-muted">
-          {effectiveLocation ? "No staff at this cinema." : "No staff yet."}
+          {query ? "No staff match your search." : effectiveLocation ? "No staff at this cinema." : "No staff yet."}
         </p>
       ) : (
         <div className="overflow-x-auto rounded-2xl border border-border bg-surface">

@@ -28,6 +28,7 @@ export default async function AdminMoviesPage({
         ...(query ? { title: { contains: query } } : {}),
         ...(effectiveLocation ? { showtimes: { some: { auditorium: { branchId: effectiveLocation } } } } : {}),
       },
+      include: { distributor: true },
       orderBy: { releaseDate: "desc" },
     }),
     scope.isCircuitAdmin
@@ -100,7 +101,7 @@ export default async function AdminMoviesPage({
                       <span className="font-medium">{m.title}</span>
                     </div>
                   </td>
-                  <td className="p-3 text-muted">{m.distributor || "—"}</td>
+                  <td className="p-3 text-muted">{m.distributor?.name || "—"}</td>
                   <td className="p-3 text-muted">{m.classification}</td>
                   <td className="p-3 text-muted">{formatRuntime(m.runtimeMins)}</td>
                   <td className="p-3 text-muted">{new Date(m.releaseDate).toLocaleDateString("en-NG")}</td>

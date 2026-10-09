@@ -44,7 +44,7 @@ export default async function SchedulingPage({
   const prevDay = new Date(today.getTime() - 24 * 60 * 60 * 1000);
   const nextDay = tomorrow;
 
-  const [auditoriums, movies, priceCards] = await Promise.all([
+  const [auditoriums, movies, priceCards, languages] = await Promise.all([
     selectedBranch
       ? prisma.auditorium.findMany({ where: { branchId: selectedBranch.id }, orderBy: { name: "asc" } })
       : Promise.resolve([]),
@@ -52,6 +52,7 @@ export default async function SchedulingPage({
     selectedBranch
       ? prisma.priceCard.findMany({ where: { branchId: selectedBranch.id, isActive: true }, orderBy: { name: "asc" } })
       : Promise.resolve([]),
+    prisma.language.findMany({ where: { isActive: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
   ]);
 
   const showtimes = selectedBranch
@@ -119,6 +120,7 @@ export default async function SchedulingPage({
         rooms={auditoriums.map((a) => ({ id: a.id, name: a.name }))}
         priceCards={priceCards.map((p) => ({ id: p.id, name: p.name }))}
         branches={branches.map((b) => ({ id: b.id, name: b.name }))}
+        languages={languages}
         defaultBranchId={selectedBranch?.id}
         defaultDate={`${dateParam}T12:00`}
       >

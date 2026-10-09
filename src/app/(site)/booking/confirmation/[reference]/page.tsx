@@ -3,8 +3,6 @@ import Image from "next/image";
 import QRCode from "qrcode";
 import { prisma } from "@/lib/prisma";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { PrintButton } from "@/components/print-button";
 import { Reveal } from "@/components/decor/reveal";
 import { formatNaira, formatShowtime } from "@/lib/format";
 import { CheckCircle2, MapPin } from "lucide-react";
@@ -97,14 +95,6 @@ export default async function ConfirmationPage({ params }: { params: Promise<{ r
           </div>
         </div>
       </Reveal>
-
-      <div className="mt-8 flex flex-wrap justify-center gap-3">
-        <PrintButton />
-        <Button href="/account" variant="outline">
-          View My Bookings
-        </Button>
-        <Button href="/movies">Browse More Movies</Button>
-      </div>
     </div>
   );
 }

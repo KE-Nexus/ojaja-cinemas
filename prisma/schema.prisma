@@ -273,14 +273,37 @@ model Movie {
   runtimeMins    Int
   cast           String
   director       String?
-  distributor    String?
+  distributorId  String?
   releaseDate    DateTime
   status         MovieStatus @default(COMING_SOON)
   createdAt      DateTime    @default(now())
 
+  distributor    Distributor?   @relation(fields: [distributorId], references: [id], onDelete: SetNull)
   showtimes      Showtime[]
   reviews        Review[]
   filmContracts  FilmContract[]
+
+  @@index([distributorId])
+}
+
+model Distributor {
+  id        String   @id @default(cuid())
+  name      String
+  email     String
+  phone     String
+  createdAt DateTime @default(now())
+
+  movies Movie[]
+}
+
+// The single source of truth for language names shown in every "select a language"
+// dropdown across the app (movies, showtimes, scheduling) instead of each form
+// hardcoding its own list.
+model Language {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
 }
 
 enum ShowtimeStatus {

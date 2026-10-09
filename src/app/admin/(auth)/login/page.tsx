@@ -21,7 +21,7 @@ export default function AdminLoginPage() {
           <p className="mt-1 text-sm text-muted">Staff &amp; management portal</p>
         </div>
         <div className="rounded-2xl border border-border bg-surface p-6">
-          <LoginForm />
+          <LoginForm variant="staff" />
         </div>
       </div>
     </div>

@@ -78,7 +78,7 @@ export function SeatMap({
                         onClick={() => onToggle(seat)}
                         whileHover={!isTaken && !readOnly ? { scale: 1.12 } : undefined}
                         whileTap={!isTaken && !readOnly ? { scale: 0.92 } : undefined}
-                        title={`${seat.row}${seat.number} · ${seat.category.toLowerCase()}`}
+                        title={`${seat.row}${seat.number}`}
                         className={cn(
                           "flex h-8 w-8 items-center justify-center rounded-md border text-[10px] font-medium transition-colors",
                           isTaken
@@ -99,26 +99,6 @@ export function SeatMap({
           );
         })}
       </motion.div>
-
-      <div className="mt-8 flex flex-wrap justify-center gap-x-6 gap-y-2 text-xs text-muted">
-        <LegendItem className="border-border bg-surface-2 text-muted" label="Standard" />
-        <LegendItem className="border-accent-gold/50 bg-surface-2 text-accent-gold" label="Premium" />
-        <LegendItem className="border-brand/60 bg-surface-2 text-brand-light" label="Recliner" />
-        <LegendItem className="border-accent-cyan/50 bg-surface-2 text-accent-cyan" label="Accessible" />
-        <LegendItem className="border-brand bg-brand text-white" label="Selected" />
-        <LegendItem className="border-transparent bg-surface-2/60 text-muted/30" label="Taken" />
-      </div>
-    </div>
-  );
-}
-
-function LegendItem({ className, label }: { className: string; label: string }) {
-  return (
-    <div className="flex items-center gap-1.5">
-      <span className={cn("flex h-5 w-5 items-center justify-center rounded border", className)}>
-        <Armchair size={11} />
-      </span>
-      {label}
     </div>
   );
 }

@@ -183,17 +183,10 @@ export default async function MovieDetailPage({ params }: { params: Promise<{ sl
       <section className="mx-auto max-w-4xl px-4 py-12 sm:px-6 lg:px-10">
         <h2 className="mb-4 text-xl font-bold tracking-tight">Reviews</h2>
 
-        {session ? (
+        {session && (
           <div className="mb-8">
             <ReviewForm movieId={movie.id} />
           </div>
-        ) : (
-          <p className="mb-8 text-sm text-muted">
-            <Link href="/login" className="text-brand-light hover:underline">
-              Log in
-            </Link>{" "}
-            to leave a review.
-          </p>
         )}
 
         {reviews.length === 0 ? (

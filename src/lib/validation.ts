@@ -1,9 +1,19 @@
 import { z } from "zod";
 
+// Digits only, with an optional leading "+" and optional spaces/dashes as separators —
+// rejects free-text strings like "n/a" that `.min(7).max(20)` alone would let through.
+const PHONE_REGEX = /^\+?[0-9]([0-9\s-]*[0-9])?$/;
+export const phoneSchema = z
+  .string()
+  .trim()
+  .min(7, "Enter a valid phone number")
+  .max(20, "Enter a valid phone number")
+  .regex(PHONE_REGEX, "Phone number must contain digits only");
+
 export const registerSchema = z.object({
   name: z.string().min(2, "Name is too short").max(80),
   email: z.string().email("Enter a valid email"),
-  phone: z.string().min(7, "Enter a valid phone number").max(20),
+  phone: phoneSchema,
   password: z.string().min(8, "Password must be at least 8 characters"),
 });
 
@@ -50,7 +60,7 @@ export const movieSchema = z.object({
   runtimeMins: z.coerce.number().int().min(1).max(600),
   cast: z.string().min(1, "Cast is required").max(500),
   director: z.string().max(150).optional().or(z.literal("")),
-  distributor: z.string().max(150).optional().or(z.literal("")),
+  distributorId: z.string().optional().or(z.literal("")),
   releaseDate: z.string().min(1, "Release date is required"),
   status: z.enum(["NOW_SHOWING", "COMING_SOON", "ARCHIVED"]),
 });
@@ -178,7 +188,7 @@ export const posItemSchema = z.object({
 export const inviteStaffSchema = z.object({
   name: z.string().min(2, "Name is required").max(80),
   email: z.string().email("Enter a valid email"),
-  phone: z.string().min(7, "Enter a valid phone number").max(20),
+  phone: phoneSchema,
   role: z.enum(["TICKETER", "ACCOUNTANT", "SUPERVISOR", "TECHNICIAN", "AUDITOR", "CIRCUIT_ADMIN"]),
   branchId: z.string().optional().or(z.literal("")),
 });
@@ -194,6 +204,17 @@ export const rosterShiftSchema = z.object({
   date: z.string().min(1, "Select a date"),
   startTime: z.string().min(1, "Enter a start time"),
   endTime: z.string().min(1, "Enter an end time"),
+});
+
+export const distributorSchema = z.object({
+  name: z.string().min(2, "Name is required").max(120),
+  email: z.string().email("Enter a valid email"),
+  phone: phoneSchema,
+});
+
+export const languageSchema = z.object({
+  name: z.string().min(2, "Name is required").max(60),
+  isActive: z.coerce.boolean().optional(),
 });
 
 export const checkoutSchema = z.object({

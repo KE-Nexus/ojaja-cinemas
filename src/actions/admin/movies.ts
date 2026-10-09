@@ -72,7 +72,7 @@ function parseMovieForm(formData: FormData) {
     runtimeMins: formData.get("runtimeMins"),
     cast: formData.get("cast"),
     director: formData.get("director") || "",
-    distributor: formData.get("distributor") || "",
+    distributorId: formData.get("distributorId") || "",
     releaseDate: formData.get("releaseDate"),
     status: formData.get("status"),
   });
@@ -115,7 +115,7 @@ export async function createMovieAction(_prev: FormState, formData: FormData): P
       backdropUrl,
       trailerUrl: trailer.url,
       director: parsed.data.director || null,
-      distributor: parsed.data.distributor || null,
+      distributorId: parsed.data.distributorId || null,
       releaseDate: new Date(parsed.data.releaseDate),
     },
   });
@@ -161,7 +161,7 @@ export async function updateMovieAction(_prev: FormState, formData: FormData): P
       backdropUrl,
       trailerUrl: trailer.url,
       director: parsed.data.director || null,
-      distributor: parsed.data.distributor || null,
+      distributorId: parsed.data.distributorId || null,
       releaseDate: new Date(parsed.data.releaseDate),
     },
   });

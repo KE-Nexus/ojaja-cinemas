@@ -13,7 +13,6 @@ type PriceCardOption = { id: string; name: string };
 type Branch = { id: string; name: string };
 
 const SCREEN_FORMATS = ["Standard 2D", "Standard 3D", "IMAX 2D", "IMAX 3D", "4DX"];
-const LANGUAGES = ["English", "Yoruba", "Igbo", "Hausa", "Pidgin", "French"];
 
 type Row = { key: number };
 
@@ -196,6 +195,7 @@ export function CreateFilmSessionsModal({
   rooms,
   priceCards,
   branches,
+  languages,
   defaultBranchId,
   defaultDate,
   prefill,
@@ -206,6 +206,7 @@ export function CreateFilmSessionsModal({
   rooms: Room[];
   priceCards: PriceCardOption[];
   branches: Branch[];
+  languages: { id: string; name: string }[];
   defaultBranchId?: string;
   defaultDate: string;
   prefill?: SessionPrefill;
@@ -294,10 +295,10 @@ export function CreateFilmSessionsModal({
 
                 <div>
                   <Label htmlFor="language">Select Language</Label>
-                  <Select id="language" name="language" defaultValue={LANGUAGES[0]}>
-                    {LANGUAGES.map((l) => (
-                      <option key={l} value={l}>
-                        {l}
+                  <Select id="language" name="language" defaultValue={languages[0]?.name ?? ""}>
+                    {languages.map((l) => (
+                      <option key={l.id} value={l.name}>
+                        {l.name}
                       </option>
                     ))}
                   </Select>

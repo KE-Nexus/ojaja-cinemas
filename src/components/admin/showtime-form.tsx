@@ -9,9 +9,11 @@ import type { Movie, Auditorium, Branch } from "@prisma/client";
 export function ShowtimeForm({
   movies,
   auditoriums,
+  languages,
 }: {
   movies: Movie[];
   auditoriums: (Auditorium & { branch: Branch })[];
+  languages: { id: string; name: string }[];
 }) {
   const [state, formAction, isPending] = useActionState<FormState, FormData>(createShowtimeAction, null);
 
@@ -54,7 +56,13 @@ export function ShowtimeForm({
         </div>
         <div>
           <Label htmlFor="language">Language</Label>
-          <Input id="language" name="language" defaultValue="English" required />
+          <Select id="language" name="language" defaultValue={languages[0]?.name ?? ""} required>
+            {languages.map((l) => (
+              <option key={l.id} value={l.name}>
+                {l.name}
+              </option>
+            ))}
+          </Select>
         </div>
         <div>
           <Label htmlFor="format">Format</Label>
